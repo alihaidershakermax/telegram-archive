@@ -26,6 +26,9 @@ type Config struct {
 	AIAPIKey                string
 	AIModel                 string
 	AIRequestTimeoutSeconds int
+	FactoryEncryptionKey    string
+	FactoryMaxBotsPerOwner  int
+	FactoryWorkers          int
 }
 
 // Text constants
@@ -84,7 +87,6 @@ func Load() {
 		log.Println("Warning: .env file not found, using system env vars")
 	}
 
-
 	Cfg = &Config{
 		BotToken:                getEnvRequired("BOT_TOKEN"),
 		OwnerID:                 getEnvInt64Required("OWNER_ID"),
@@ -100,6 +102,9 @@ func Load() {
 		AIAPIKey:                getEnvDefault("AI_API_KEY", os.Getenv("OPENAI_API_KEY")),
 		AIModel:                 getEnvDefault("AI_MODEL", "gpt-5-mini"),
 		AIRequestTimeoutSeconds: getEnvInt("AI_REQUEST_TIMEOUT_SECONDS", 45),
+		FactoryEncryptionKey:    os.Getenv("FACTORY_ENCRYPTION_KEY"),
+		FactoryMaxBotsPerOwner:  getEnvInt("FACTORY_MAX_BOTS_PER_OWNER", 5),
+		FactoryWorkers:          getEnvInt("FACTORY_WORKERS", 8),
 	}
 
 	bcID := os.Getenv("BROADCAST_CHANNEL_ID")

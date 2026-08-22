@@ -76,6 +76,34 @@ type SharedFile struct {
 	CreatedBy      int64     `bson:"created_by"`
 }
 
+// ManagedBot represents a user-owned bot registered in the Bot Factory.
+type ManagedBot struct {
+	ID                string    `bson:"_id" json:"id"`
+	OwnerID           int64     `bson:"owner_id" json:"owner_id"`
+	TokenCiphertext   string    `bson:"token_ciphertext" json:"-"`
+	TokenNonce        string    `bson:"token_nonce" json:"-"`
+	TokenHash         string    `bson:"token_hash" json:"-"`
+	TelegramBotID     int64     `bson:"telegram_bot_id" json:"telegram_bot_id"`
+	Username          string    `bson:"username" json:"username"`
+	FirstName         string    `bson:"first_name,omitempty" json:"first_name,omitempty"`
+	Status            string    `bson:"status" json:"status"`
+	CreatedAt         time.Time `bson:"created_at" json:"created_at"`
+	UpdatedAt         time.Time `bson:"updated_at" json:"updated_at"`
+	LastSeenAt        time.Time `bson:"last_seen_at,omitempty" json:"last_seen_at,omitempty"`
+	LastError         string    `bson:"last_error,omitempty" json:"last_error,omitempty"`
+	ConsecutiveErrors int       `bson:"consecutive_errors" json:"consecutive_errors"`
+	TotalUpdates      int64     `bson:"total_updates" json:"total_updates"`
+	TotalErrors       int64     `bson:"total_errors" json:"total_errors"`
+	ActiveRequests    int64     `bson:"-" json:"active_requests"`
+	LastLatencyMS     int64     `bson:"-" json:"last_latency_ms"`
+}
+
+const (
+	ManagedBotActive    = "active"
+	ManagedBotPaused    = "paused"
+	ManagedBotUnhealthy = "unhealthy"
+)
+
 // BotSetting represents a key-value setting stored in the database.
 type BotSetting struct {
 	Key   string `bson:"key"`
@@ -129,6 +157,6 @@ type UserState struct {
 
 // AwaitingState tracks what the bot is waiting for from a user.
 type AwaitingState struct {
-	Type  string // "new_cat", "new_sub", "broadcast", "add_admin", "welcome_text", "welcome_photo", "upload"
+	Type  string // "new_cat", "new_sub", "broadcast", "add_admin", "welcome_text", "welcome_photo", "upload", "factory_bot_token"
 	CatID int    // used for "new_sub"
 }

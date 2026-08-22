@@ -92,7 +92,11 @@ func HandleCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 	case data == "about":
 		showAbout(bot, query, hasPhoto)
 
+	case data == "factory_info":
+		HandleFactoryInfoCallback(bot, query)
+
 	case data == "noop":
+
 		// do nothing
 
 	// ── Admin callbacks ─────────────────────────────────

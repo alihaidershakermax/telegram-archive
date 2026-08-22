@@ -71,3 +71,40 @@ The summarization endpoint accepts up to 100,000 UTF-8 bytes per request and ret
 ## Recommended deployment
 
 Keep `API_KEY`, `AI_API_KEY`, and `BOT_TOKEN` in the deployment secret store. Place the service behind HTTPS, restrict the API port to trusted clients, rotate keys periodically, and add a separate gateway or reverse proxy if multiple consumers need different quotas or scopes. The current first version uses one application key; scoped keys, JWT/OAuth, usage accounting, and a persistent job queue should be added before opening the API to third parties.
+
+## Bot Factory API v2
+
+API v2 manages bots that have already been created through Telegram BotFather. The factory validates each supplied token with `getMe`, encrypts the token using AES-256-GCM, stores only safe metadata in responses, and starts one isolated polling worker per active bot. The API key identifies the platform operator; the token owner is always the configured `OWNER_ID` and is never accepted from a request body.
+
+Before enabling the factory, set `FACTORY_ENCRYPTION_KEY` to a random 32-byte value encoded as 64 hexadecimal characters or base64. Set `FACTORY_MAX_BOTS_PER_OWNER` to the maximum registration count and keep `FACTORY_WORKERS` ready for future queued outbound jobs. The factory remains disabled when the encryption key is absent.
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/v2/health` | Reports whether the factory is configured; public and cache-free |
+| `GET` | `/api/v2/bots` | Lists safe metadata and live metrics for managed bots |
+| `POST` | `/api/v2/bots` | Registers a BotFather token and starts its worker |
+| `GET` | `/api/v2/bots/{id}` | Returns one managed bot without token material |
+| `POST` | `/api/v2/bots/{id}/pause` | Stops polling while preserving encrypted registration |
+| `POST` | `/api/v2/bots/{id}/resume` | Revalidates the encrypted token and restarts polling |
+| `DELETE` | `/api/v2/bots/{id}` | Stops the worker and permanently deletes the registration |
+| `GET` | `/api/v2/router/best` | Selects the healthiest available bot using live routing signals |
+
+```bash
+curl -H "X-API-Key: $API_KEY" http://localhost:8000/api/v2/bots
+
+curl -X POST http://localhost:8000/api/v2/bots \\
+  -H "X-API-Key: $API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"token":"123456:REDACTED"}'
+
+curl -X POST -H "X-API-Key: $API_KEY" http://localhost:8000/api/v2/bots/<id>/pause
+curl -X POST -H "X-API-Key: $API_KEY" http://localhost:8000/api/v2/bots/<id>/resume
+curl -H "X-API-Key: $API_KEY" http://localhost:8000/api/v2/router/best
+curl -X DELETE -H "X-API-Key: $API_KEY" http://localhost:8000/api/v2/bots/<id>
+```
+
+The intelligent routing score uses health recency, observed latency, active requests, consecutive errors, and accumulated errors. Telegram update streams cannot be merged across tokens, so the selector chooses a healthy bot for factory-managed outbound work rather than moving one Telegram session between tokens. All v2 responses intentionally omit token ciphertext, nonce, hash, and plaintext.
+
+## Bot Factory Telegram commands
+
+Authorized operators can use `/newbot` to begin a two-step onboarding flow and send the token in a separate message. The token is never accepted as a command argument, which reduces accidental exposure in chat history. `/mybots` displays the caller's safe bot metadata, and `/cancel` clears a pending onboarding flow.

@@ -83,6 +83,9 @@ var indexSpecs = []indexSpec{
 	{"shared_files", bson.D{{Key: "share_hash", Value: 1}}, true},
 	{"shared_files", bson.D{{Key: "expires_at", Value: 1}}, false},
 	{"bot_settings", bson.D{{Key: "key", Value: 1}}, true},
+	{"managed_bots", bson.D{{Key: "owner_id", Value: 1}, {Key: "created_at", Value: -1}}, false},
+	{"managed_bots", bson.D{{Key: "token_hash", Value: 1}}, true},
+	{"managed_bots", bson.D{{Key: "status", Value: 1}, {Key: "updated_at", Value: -1}}, false},
 	{"admin_logs", bson.D{{Key: "admin_id", Value: 1}, {Key: "timestamp", Value: -1}}, false},
 	{"admin_logs", bson.D{{Key: "timestamp", Value: -1}}, false},
 }

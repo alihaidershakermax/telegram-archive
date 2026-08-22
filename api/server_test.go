@@ -33,6 +33,35 @@ func TestHealthzAliasIsPublic(t *testing.T) {
 	}
 }
 
+func TestFactoryV2Health(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/health", nil)
+	res := httptest.NewRecorder()
+	testServer().Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", res.Code)
+	}
+}
+
+func TestFactoryV2RequiresConfiguration(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/bots", nil)
+	req.Header.Set("X-API-Key", "secret")
+	res := httptest.NewRecorder()
+	testServer().Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", res.Code)
+	}
+}
+
+func TestFactoryV2SendRequiresConfiguration(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/router/send", nil)
+	req.Header.Set("X-API-Key", "secret")
+	res := httptest.NewRecorder()
+	testServer().Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", res.Code)
+	}
+}
+
 func TestProtectedRouteRequiresAPIKey(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/categories", nil)
 	res := httptest.NewRecorder()

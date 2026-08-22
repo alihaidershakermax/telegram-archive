@@ -19,6 +19,7 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"telegram-archive-bot/ai"
 	"telegram-archive-bot/config"
+	"telegram-archive-bot/factory"
 	"telegram-archive-bot/services"
 )
 
@@ -32,6 +33,7 @@ type Server struct {
 	buckets       map[string]bucket
 	bundleBuilder func(context.Context, *tgbotapi.BotAPI, []int) ([]byte, error)
 	bundleSender  func(int64, []byte) error
+	factory       *factory.Manager
 }
 
 type bucket struct {
@@ -54,11 +56,19 @@ func NewServer(cfg *config.Config, bot *tgbotapi.BotAPI) *Server {
 	}
 }
 
+// SetFactory attaches the managed-bot lifecycle service to API v2.
+func (s *Server) SetFactory(manager *factory.Manager) { s.factory = manager }
+
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.health)
 	mux.HandleFunc("/api/v1/health", s.health)
 	mux.HandleFunc("/healthz", s.health)
+	mux.HandleFunc("/api/v2/health", s.factoryV2Health)
+	mux.HandleFunc("/api/v2/bots", s.withAuth(s.factoryV2Bots))
+	mux.HandleFunc("/api/v2/bots/", s.withAuth(s.factoryV2Bot))
+	mux.HandleFunc("/api/v2/router/best", s.withAuth(s.factoryV2Router))
+	mux.HandleFunc("/api/v2/router/send", s.withAuth(s.factoryV2Send))
 	mux.HandleFunc("/api/v1/categories", s.withAuth(s.categories))
 	mux.HandleFunc("/api/v1/subjects", s.withAuth(s.subjects))
 	mux.HandleFunc("/api/v1/files", s.withAuth(s.files))

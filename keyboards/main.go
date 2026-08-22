@@ -12,6 +12,7 @@ func MainMenuKeyboard() tgbotapi.InlineKeyboardMarkup {
 		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("👨‍💻 عن المطور", "about"),
+			tgbotapi.NewInlineKeyboardButtonData("🤖 إدارة البوتات", "factory_info"),
 		),
 	)
 }

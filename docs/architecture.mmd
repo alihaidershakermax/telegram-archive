@@ -1,33 +1,47 @@
-flowchart TB
+flowchart TD
     U[Telegram Users] --> TG[Telegram Bot API]
-    A[Admins] --> TG
-    C[External Clients] -->|API Key + Rate Limit| HTTP[HTTP API :PORT]
+    A[Authorized Operators] --> TG
+    C[External Clients] -->|API Key + Rate Limit| HTTP[HTTP API]
 
-    TG --> UPD[Update Polling]
+    TG --> PRIMARY[Primary Controller Bot]
+    PRIMARY --> UPD[Update Polling]
     UPD --> ROUTER[Command / Callback Router]
     ROUTER --> H[Handlers]
     H --> AUTHZ[Permission & Moderation Checks]
     AUTHZ --> ARCH[Archive Handlers]
     AUTHZ --> ADM[Admin Handlers]
     AUTHZ --> AIH[AI Handlers]
+    AUTHZ --> FACTORYH[Bot Factory Commands]
+
+    FACTORYH --> MANAGER[Bot Factory Manager]
+    MANAGER --> VALIDATE[Telegram getMe Validation]
+    MANAGER --> CIPHER[AES-256-GCM Token Encryption]
+    MANAGER --> REG[(Managed Bot Registry)]
+    MANAGER --> WORKERS[Isolated Managed Bot Workers]
+    WORKERS -->|one token per stream| TG
+    WORKERS --> METRICS[Health / Latency / Error Metrics]
+    METRICS --> POLICY[Intelligent Routing Policy]
 
     HTTP --> APIAUTH[API Authentication]
-    APIAUTH --> APIR[Archive API]
-    APIAUTH --> BUNDLE[Bundle API]
-    APIAUTH --> AIGW[AI Gateway API]
+    APIAUTH --> APIV1[API v1]
+    APIAUTH --> APIV2[API v2 Bot Factory]
+    APIV1 --> ARCH
+    APIV2 --> MANAGER
+    APIV2 --> POLICY
+    APIV2 --> HEALTH[Health endpoints: healthz and v2 health]
 
     ARCH --> AS[Archive Service]
     ADM --> ADS[Admin & User Services]
-    AIH --> AIGW
-    APIR --> AS
-    BUNDLE --> AS
-    BUNDLE --> ZIP[ZIP Builder]
+    AIH --> AIGW[AI Gateway]
+    APIV1 --> BUNDLE[Bundle Service]
+    BUNDLE --> ZIP[Bounded ZIP Builder]
     AIGW --> LLM[OpenAI-Compatible Provider]
 
     AS --> DB[(MongoDB)]
     ADS --> DB
-    APIR --> DB
     BUNDLE --> DB
+    MANAGER --> DB
+    REG --> DB
     DB --> IDX[Indexes & Atomic Counters]
 
     AS --> TGA[Telegram File / Message API]
@@ -41,7 +55,7 @@ flowchart TB
     classDef risk fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
 
     class U,A,C,TG,LLM external
-    class UPD,ROUTER,H,AUTHZ,HTTP,APIAUTH,APIR,BUNDLE,AIGW,ARCH,ADM,AIH app
-    class AS,ADS,AIGW,ZIP service
-    class DB,IDX,TGA data
+    class PRIMARY,UPD,ROUTER,H,AUTHZ,HTTP,APIAUTH,APIV1,APIV2,FACTORYH,MANAGER,VALIDATE,CIPHER,WORKERS,POLICY,HEALTH,ARCH,ADM,AIH app
+    class AS,ADS,AIGW,BUNDLE,ZIP,METRICS service
+    class DB,REG,IDX,TGA data
     class TMP risk

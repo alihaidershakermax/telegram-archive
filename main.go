@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"telegram-archive-bot/api"
 	"telegram-archive-bot/config"
 	"telegram-archive-bot/db"
+	"telegram-archive-bot/factory"
 	"telegram-archive-bot/handlers"
 )
 
@@ -35,6 +37,22 @@ func main() {
 	}
 	log.Printf("Authorized on account %s", bot.Self.UserName)
 
+	// Start the optional Bot Factory. It stays disabled unless a strong
+	// encryption key is configured, so plaintext child-bot tokens are never persisted.
+	var factoryManager *factory.Manager
+	if config.Cfg.FactoryEncryptionKey != "" {
+		factoryManager, err = factory.NewManager(config.Cfg, handleUpdate)
+		if err != nil {
+			log.Printf("Bot Factory disabled: %v", err)
+		} else {
+			handlers.SetBotFactory(factoryManager)
+			if err := factoryManager.LoadAndStart(context.Background()); err != nil {
+				log.Printf("Bot Factory restore warning: %v", err)
+			}
+			defer factoryManager.Close()
+		}
+	}
+
 	// Set bot commands menu in Telegram
 	botCmds := []tgbotapi.BotCommand{
 		{Command: "start", Description: "🚀 القائمة الرئيسية / بدء البوت"},
@@ -44,6 +62,9 @@ func main() {
 		{Command: "unban", Description: "✅ إلغاء حظر (للمشرفين)"},
 		{Command: "ai", Description: "🤖 اسأل المساعد الذكي"},
 		{Command: "summarize", Description: "📝 تلخيص نص"},
+		{Command: "newbot", Description: "🤖 إضافة بوت مُدار"},
+		{Command: "mybots", Description: "📊 بوتاتي المُدارة"},
+		{Command: "cancel", Description: "❌ إلغاء العملية"},
 	}
 	_, errCmd := bot.Request(tgbotapi.NewSetMyCommands(botCmds...))
 	if errCmd != nil {
@@ -62,7 +83,9 @@ func main() {
 	}
 	go func() {
 		apiServer := api.NewServer(config.Cfg, bot)
+		apiServer.SetFactory(factoryManager)
 		log.Printf("API and health server listening on port %s", port)
+
 		if err := http.ListenAndServe(":"+port, apiServer.Handler()); err != nil {
 			log.Printf("API server stopped: %v", err)
 		}
@@ -112,6 +135,12 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 			handlers.HandleAICommand(bot, msg, false)
 		case "summarize":
 			handlers.HandleAICommand(bot, msg, true)
+		case "newbot":
+			handlers.HandleNewBotCommand(bot, msg)
+		case "mybots":
+			handlers.HandleMyBotsCommand(bot, msg)
+		case "cancel":
+			handlers.HandleCancelCommand(bot, msg)
 
 		}
 		return
@@ -119,6 +148,9 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 
 	// Handle text messages (for awaiting state)
 	if msg.Text != "" {
+		if handlers.HandleFactoryText(bot, msg) {
+			return
+		}
 		handlers.HandleTextMessage(bot, msg)
 		return
 	}
