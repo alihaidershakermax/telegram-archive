@@ -63,3 +63,58 @@
 - [x] إضافة auto-provision للـcollections والفهارس عند إنشاء بوت
 - [x] إضافة API لحالة التوسعة وآخر migration لكل بوت
 - [x] إضافة اختبارات وتوثيق ومزامنة Release للتوسعة التلقائية
+
+# Horizontal Sharding and Online Rebalancing
+
+- [ ] إضافة سجل عقد أو قواعد MongoDB القابلة للتوسعة تحت تحكم البوت الأب
+- [ ] إضافة shard map وvirtual shards مع إبقاء namespace كل بوت معزولاً
+- [ ] إضافة Shard Router للقراءة والكتابة مع fallback آمن
+- [ ] إضافة online rebalancer بنقل chunked وdual-write وchecksum
+- [ ] إضافة cutover ذري وrollback دون إيقاف البوت
+- [ ] توزيع virtual shards تلقائياً عند إضافة قاعدة جديدة
+- [ ] إضافة API لحالة العقد والتوزيع وعمليات النقل
+- [ ] إضافة اختبارات وتوثيق ومزامنة Release للتوسعة الأفقية
+
+# Separate MongoDB Cluster Distribution
+
+- [x] إضافة Cluster Registry مشفر داخل قاعدة البوت الأب
+- [x] إضافة فحص اتصال وصحة لكل MongoDB Cluster جديد
+- [ ] إضافة shard map مستقل لكل bot namespace
+- [ ] إضافة Router متعدد الاتصالات مع fallback دون خلط بيانات البوتات
+- [ ] إضافة dual-write ونقل chunks مع checksum وcutover ذري
+- [ ] إضافة rollback وإعادة محاولة لعمليات النقل الفاشلة
+- [ ] إضافة API لتسجيل وإزالة ومراقبة Clusters
+- [ ] إضافة اختبارات وتوثيق ومزامنة Release للتوزيع متعدد الـClusters
+
+# Telegram Parent DB Control Panel
+
+- [x] إضافة زر أو أمر `/dbpanel` في لوحة البوت الأب
+- [x] إضافة تدفق إدخال اسم وMongo URI في محادثة خاصة مع المالك
+- [x] حذف رسالة Mongo URI بعد قراءتها ومنع تسجيلها في logs أو API
+- [x] إضافة عرض Clusters وحالتها وتفعيلها وتعطيلها وإزالتها من Telegram
+- [x] إضافة اختبار اتصال قبل حفظ Cluster وتشفير بياناته
+- [ ] ربط إضافة Cluster بتوزيع virtual shards وإعادة التوازن الآمن
+- [x] إضافة اختبارات وتوثيق ومزامنة Release لتدفق لوحة التحكم
+
+# Near-zero Downtime Migration
+
+- [x] إضافة migration job خاص بكل bot مع source وtarget وprogress
+- [x] نسخ بيانات bot namespace على دفعات مع checksum
+- [x] إيقاف worker المستهدف خلال cutover فقط
+- [x] نسخ delta الأخير قبل تبديل route
+- [x] إبقاء المصدر كنسخة rollback وعدم حذفه تلقائياً
+- [x] إضافة أوامر `/migratebot` و`/migrationstatus` للوحة البوت الأب
+- [ ] اختبار وتوثيق النقل بين Clusters منفصلة ومزامنة Release
+
+# Lightweight Group Bot and Unified API
+
+- [x] إضافة group namespace مستقل لكل مجموعة ولكل بوت
+- [ ] إضافة إعدادات وصلاحيات المجموعة مع owner وadmin وmoderator وmember
+- [ ] دعم أوامر المجموعة مع التحقق من صلاحيات Telegram
+- [x] ربط وظائف الأرشيف والملفات وAI عبر API v2 موحد يحمل bot_id وchat_id
+- [ ] إضافة group rate limits وanti-flood وحدود الملفات
+- [ ] تقليل استهلاك الذاكرة عبر bounded queues وstreaming وعدم تخزين media bytes
+- [ ] تحسين MongoDB عبر connection pool محدود وفهارس group scoped وقراءة projection
+- [ ] إضافة cache خفيف TTL مع منع تسرب بيانات مجموعة إلى أخرى
+- [ ] إضافة health وmetrics للأداء على مستوى البوت والمجموعة
+- [ ] إضافة اختبارات وتوثيق ومزامنة Release لدعم المجموعات

@@ -171,6 +171,26 @@ curl -X DELETE -H "X-API-Key: $API_KEY" http://localhost:8000/api/v2/bots/<id>
 
 The routing score prefers active bots with recent health, low observed latency, fewer active requests, and fewer consecutive errors. Telegram update streams remain isolated by token; the router selects a healthy bot for factory-managed jobs rather than attempting to merge Telegram sessions.
 
+## Lightweight Group Support
+
+يمكن للبوت العمل داخل المجموعات مع إعدادات معزولة حسب `bot_id` و`chat_id`. الأمر `/group` يعرض حالة المجموعة ويهيئ سجلها داخل namespace البوت الحالي، بينما تبقى عمليات الملفات خلف Storage Gateway الخاص بالبوت الأب.
+
+تتوفر إعدادات المجموعة عبر API v2 المصادق عليه:
+
+```bash
+curl -H "X-API-Key: $API_KEY" \
+  -H "X-Telegram-Bot-ID: 123456789" \
+  https://example.com/api/v2/groups/-1001234567890
+
+curl -X PATCH -H "X-API-Key: $API_KEY" \
+  -H "X-Telegram-Bot-ID: 123456789" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled":true,"admins_only":true}' \
+  https://example.com/api/v2/groups/-1001234567890
+```
+
+يجب أن يكون `chat_id` رقماً سالباً للمجموعات، وأن يطابق `X-Telegram-Bot-ID` namespace البوت المطلوب. مفاتيح API المقيّدة لا تتجاوز bot scope الخاص بها، وتستخدم `archive:read` للقراءة و`archive:write` للتعديل.
+
 ## Security and reliability
 
 The API uses constant-time API-key comparison and per-key rate limiting. Share tokens use random values and expire. Administration routes apply permission checks before content, user, broadcast, or settings operations.

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"go.mongodb.org/mongo-driver/bson"
 	"telegram-archive-bot/ai"
 	"telegram-archive-bot/config"
 	"telegram-archive-bot/db"
@@ -109,6 +110,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v2/router/send", s.withAuth(s.factoryV2Send))
 	mux.HandleFunc("/api/v2/storage/queue", s.withAuth(s.storageQueue))
 	mux.HandleFunc("/api/v2/monitor", s.withAuth(s.factoryMonitor))
+	mux.HandleFunc("/api/v2/groups/", s.withAuth(s.groupConfig))
 	mux.HandleFunc("/api/v1/categories", s.withAuth(s.categories))
 	mux.HandleFunc("/api/v1/subjects", s.withAuth(s.subjects))
 	mux.HandleFunc("/api/v1/files", s.withAuth(s.files))
@@ -116,6 +118,68 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/ai/chat", s.withAuth(s.aiChat))
 	mux.HandleFunc("/api/v1/ai/summarize", s.withAuth(s.aiSummarize))
 	return requestID(mux)
+}
+
+func (s *Server) groupConfig(w http.ResponseWriter, r *http.Request) {
+	if s.factory == nil {
+		writeError(w, http.StatusServiceUnavailable, "bot factory is not configured")
+		return
+	}
+	rawBotID := strings.TrimSpace(r.Header.Get("X-Telegram-Bot-ID"))
+	botID, err := strconv.ParseInt(rawBotID, 10, 64)
+	if err != nil || botID <= 0 {
+		writeError(w, http.StatusBadRequest, "X-Telegram-Bot-ID is required")
+		return
+	}
+	chatID, err := strconv.ParseInt(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v2/groups/"), "/"), 10, 64)
+	if err != nil || chatID >= 0 {
+		writeError(w, http.StatusBadRequest, "invalid group chat id")
+		return
+	}
+	ctx, err := s.archiveContextFromRequest(r)
+	if err != nil {
+		writeError(w, http.StatusForbidden, err.Error())
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		group, err := services.GetOrCreateGroup(ctx, botID, chatID, "")
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "group config unavailable")
+			return
+		}
+		writeJSON(w, http.StatusOK, group)
+	case http.MethodPatch:
+		var input struct {
+			Enabled    *bool `json:"enabled"`
+			AdminsOnly *bool `json:"admins_only"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&input); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON")
+			return
+		}
+		if input.Enabled != nil {
+			if err := services.SetGroupEnabled(ctx, botID, chatID, *input.Enabled); err != nil {
+				writeError(w, http.StatusInternalServerError, "group update failed")
+				return
+			}
+		}
+		if input.AdminsOnly != nil {
+			_, err := db.ColScoped(ctx, "group_configs").UpdateOne(ctx, bson.M{"bot_id": botID, "chat_id": chatID}, bson.M{"$set": bson.M{"admins_only": *input.AdminsOnly, "updated_at": time.Now().UTC()}})
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "group update failed")
+				return
+			}
+		}
+		group, err := services.GetOrCreateGroup(ctx, botID, chatID, "")
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "group config unavailable")
+			return
+		}
+		writeJSON(w, http.StatusOK, group)
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
@@ -176,6 +240,7 @@ func (s *Server) withAuth(next http.HandlerFunc) http.HandlerFunc {
 
 func apiKeyPathAllowed(path string) bool {
 	return strings.HasPrefix(path, "/api/v1/categories") ||
+		strings.HasPrefix(path, "/api/v2/groups/") ||
 		strings.HasPrefix(path, "/api/v1/subjects") ||
 		strings.HasPrefix(path, "/api/v1/files") ||
 		strings.HasPrefix(path, "/api/v1/bundle") ||

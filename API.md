@@ -176,3 +176,9 @@ Backups are stored in the primary database as metadata plus per-document snapsho
 ## Bot Factory Telegram commands
 
 Authorized operators can use `/newbot` to begin a two-step onboarding flow and send the token in a separate message. The token is never accepted as a command argument, which reduces accidental exposure in chat history. `/mybots` displays the caller's safe bot metadata, and `/cancel` clears a pending onboarding flow.
+
+### Parent Telegram database panel
+
+The parent bot exposes `/dbpanel` and `/dbs` for safe cluster metadata, `/adddb` for private two-step onboarding, `/dbdisable <cluster_id>`, `/dbenable <cluster_id>`, and `/dbremove <cluster_id>`. `/dbremove` refuses to delete a cluster that still has assigned bots.
+
+When a cluster is added, the parent verifies its connection and encrypts the URI before saving it. New managed bots can be assigned to the least-used active external cluster. Existing bot databases are never redirected to an empty cluster automatically; they require the online migration workflow first. This is the safety boundary that prevents a scale-out operation from appearing to succeed while old data is temporarily unavailable.

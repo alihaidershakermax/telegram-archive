@@ -93,7 +93,7 @@ func TestArchiveNamespaceRejectsInvalidBotID(t *testing.T) {
 }
 
 func TestAPIKeyPathPolicy(t *testing.T) {
-	if !apiKeyPathAllowed("/api/v1/files") || !apiKeyPathAllowed("/api/v1/ai/chat") {
+	if !apiKeyPathAllowed("/api/v1/files") || !apiKeyPathAllowed("/api/v1/ai/chat") || !apiKeyPathAllowed("/api/v2/groups/-1001") {
 		t.Fatal("expected archive and AI paths to be allowed")
 	}
 	if apiKeyPathAllowed("/api/v2/bots") || apiKeyPathAllowed("/api/v1/health") {
@@ -105,6 +105,14 @@ func TestAPIKeyPermissionMapping(t *testing.T) {
 	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/files", nil)
 	if got := apiKeyPermissionForRequest(getReq); got != "archive:read" {
 		t.Fatalf("expected archive:read, got %q", got)
+	}
+	groupGetReq := httptest.NewRequest(http.MethodGet, "/api/v2/groups/-1001", nil)
+	if got := apiKeyPermissionForRequest(groupGetReq); got != "archive:read" {
+		t.Fatalf("expected group archive:read, got %q", got)
+	}
+	groupPatchReq := httptest.NewRequest(http.MethodPatch, "/api/v2/groups/-1001", nil)
+	if got := apiKeyPermissionForRequest(groupPatchReq); got != "archive:write" {
+		t.Fatalf("expected group archive:write, got %q", got)
 	}
 	postReq := httptest.NewRequest(http.MethodPost, "/api/v1/files", nil)
 	if got := apiKeyPermissionForRequest(postReq); got != "archive:write" {

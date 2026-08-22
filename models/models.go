@@ -87,6 +87,7 @@ type ManagedBot struct {
 	Username             string    `bson:"username" json:"username"`
 	FirstName            string    `bson:"first_name,omitempty" json:"first_name,omitempty"`
 	DatabaseName         string    `bson:"database_name" json:"database_name"`
+	ClusterID            string    `bson:"cluster_id,omitempty" json:"cluster_id,omitempty"`
 	StorageFolder        string    `bson:"storage_folder" json:"storage_folder"`
 	StorageChannelID     int64     `bson:"storage_channel_id" json:"storage_channel_id"`
 	MaxUsers             int64     `bson:"max_users" json:"max_users"`
@@ -109,6 +110,55 @@ const (
 	ManagedBotActive    = "active"
 	ManagedBotPaused    = "paused"
 	ManagedBotUnhealthy = "unhealthy"
+)
+
+// GroupConfig stores lightweight settings for one Telegram group inside one bot namespace.
+type GroupConfig struct {
+	ID         string    `bson:"_id" json:"id"`
+	BotID      int64     `bson:"bot_id" json:"bot_id"`
+	ChatID     int64     `bson:"chat_id" json:"chat_id"`
+	Title      string    `bson:"title,omitempty" json:"title,omitempty"`
+	Enabled    bool      `bson:"enabled" json:"enabled"`
+	AdminsOnly bool      `bson:"admins_only" json:"admins_only"`
+	CreatedAt  time.Time `bson:"created_at" json:"created_at"`
+	UpdatedAt  time.Time `bson:"updated_at" json:"updated_at"`
+}
+
+// StorageCluster represents a separately reachable MongoDB cluster registered by the parent bot.
+type StorageCluster struct {
+	ID             string    `bson:"_id" json:"id"`
+	Name           string    `bson:"name" json:"name"`
+	URICiphertext  string    `bson:"uri_ciphertext" json:"-"`
+	URINonce       string    `bson:"uri_nonce" json:"-"`
+	DatabasePrefix string    `bson:"database_prefix" json:"database_prefix"`
+	Status         string    `bson:"status" json:"status"`
+	LastHealthAt   time.Time `bson:"last_health_at,omitempty" json:"last_health_at,omitempty"`
+	LastError      string    `bson:"last_error,omitempty" json:"last_error,omitempty"`
+	CreatedAt      time.Time `bson:"created_at" json:"created_at"`
+	UpdatedAt      time.Time `bson:"updated_at" json:"updated_at"`
+}
+
+const (
+	StorageClusterActive   = "active"
+	StorageClusterDraining = "draining"
+	StorageClusterOffline  = "offline"
+)
+
+// BotShardRoute maps a virtual shard in one bot namespace to a separate cluster.
+type BotShardRoute struct {
+	ID           string    `bson:"_id" json:"id"`
+	BotID        int64     `bson:"bot_id" json:"bot_id"`
+	VirtualShard int       `bson:"virtual_shard" json:"virtual_shard"`
+	ClusterID    string    `bson:"cluster_id" json:"cluster_id"`
+	DatabaseName string    `bson:"database_name" json:"database_name"`
+	State        string    `bson:"state" json:"state"`
+	UpdatedAt    time.Time `bson:"updated_at" json:"updated_at"`
+}
+
+const (
+	ShardRouteActive    = "active"
+	ShardRouteMigrating = "migrating"
+	ShardRouteDraining  = "draining"
 )
 
 // ExpansionState tracks the parent controller's automatic database expansion for one bot.
@@ -253,6 +303,7 @@ type UserState struct {
 
 // AwaitingState tracks what the bot is waiting for from a user.
 type AwaitingState struct {
-	Type  string // "new_cat", "new_sub", "broadcast", "add_admin", "welcome_text", "welcome_photo", "upload", "factory_bot_token"
+	Type  string // workflow identifier
 	CatID int    // used for "new_sub"
+	Value string // short, non-secret workflow value such as a cluster name
 }

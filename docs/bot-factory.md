@@ -67,3 +67,17 @@ Each scan uses a MongoDB lease keyed by the child bot ID. A second parent proces
 Schema preparation is additive and idempotent. The controller ensures indexes in the child database and records `001_base_indexes` in `schema_migrations`; it never drops, renames, or rewrites live collections. Capacity is reported as `standard` or `expanded` according to the configured document and byte thresholds. Actual disk-tier growth remains the responsibility of the MongoDB provider or Atlas autoscaling policy; the parent controller handles per-bot provisioning, indexes, migrations, and capacity signals without stopping the Telegram workers.
 
 The latest state is available at `GET /api/v2/bots/{id}/expansion`. Configure the scan with `DB_EXPANSION_POLL_SECONDS`, `DB_EXPANSION_BATCH_SIZE`, `DB_EXPANSION_MAX_DOCS`, `DB_EXPANSION_MAX_BYTES`, `DB_EXPANSION_LOCK_SECONDS`, and `DB_EXPANSION_COOLDOWN_SECONDS`.
+
+## MongoDB cluster control from the parent bot
+
+The parent bot now provides `/dbpanel`, `/adddb`, and `/dbs`. The owner starts `/adddb` in a private chat, supplies a short cluster name, and then sends the MongoDB URI in a separate message. The URI is deleted immediately after receipt, verified with a short-lived ping connection, encrypted with the existing factory key, and never returned in API responses or logs.
+
+A newly registered managed bot is assigned to the active cluster with the fewest current bot assignments. Existing bots keep their current `cluster_id`; adding a cluster never points an existing bot at an empty database. Moving an existing namespace requires the online migration workflow with verification and cutover, which is intentionally separate to prevent data loss.
+
+Separate cluster registration requires MongoDB network access from the bot host, a database user with permissions for the bot databases, and TLS-enabled connection strings where supported. The primary bot database remains the control plane and stores only encrypted cluster metadata, routes, and migration state.
+
+## Near-zero downtime namespace migration
+
+The parent bot supports `/migratebot <bot_id> <target_cluster_id>` and `/migrationstatus [bot_id]`. Migration copies the bot database collection by collection in bounded cursor batches, upserts documents into the target, and records progress and a SHA-256 checksum in `namespace_migrations`. The worker is stopped only for the final consistency pass and route cutover. The source cluster is retained as the rollback copy and is never deleted automatically.
+
+If any copy, checksum, route update, or worker restart fails, the migration is marked failed and the old route remains authoritative. Operators should not remove the source cluster until the target has been observed in production and a separate retention decision has been made.

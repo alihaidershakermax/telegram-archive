@@ -75,6 +75,16 @@ func main() {
 		{Command: "summarize", Description: "📝 تلخيص نص"},
 		{Command: "newbot", Description: "🤖 إضافة بوت مُدار"},
 		{Command: "mybots", Description: "📊 بوتاتي المُدارة"},
+		{Command: "dbpanel", Description: "🗄 لوحة قواعد البيانات"},
+		{Command: "adddb", Description: "➕ إضافة MongoDB Cluster"},
+		{Command: "dbs", Description: "📋 عرض MongoDB Clusters"},
+		{Command: "dbdisable", Description: "⏸ تعطيل Cluster"},
+		{Command: "dbenable", Description: "▶️ تفعيل Cluster"},
+		{Command: "dbremove", Description: "🗑 إزالة Cluster غير مرتبطة"},
+		{Command: "migratebot", Description: "🔄 نقل قاعدة بوت"},
+		{Command: "migrationstatus", Description: "📈 حالة نقل القواعد"},
+		{Command: "group", Description: "⚙️ إعدادات المجموعة"},
+
 		{Command: "cancel", Description: "❌ إلغاء العملية"},
 	}
 	if _, errCmd := bot.Request(tgbotapi.NewSetMyCommands(botCmds...)); errCmd != nil {
@@ -176,6 +186,25 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 			handlers.HandleNewBotCommand(bot, msg)
 		case "mybots":
 			handlers.HandleMyBotsCommand(bot, msg)
+		case "dbpanel":
+			handlers.HandleDatabasePanelCommand(bot, msg)
+		case "adddb":
+			handlers.HandleAddDatabaseCommand(bot, msg)
+		case "dbs":
+			handlers.HandleDatabaseListCommand(bot, msg)
+		case "dbdisable":
+			handlers.HandleDatabaseClusterAction(bot, msg, "disable")
+		case "dbenable":
+			handlers.HandleDatabaseClusterAction(bot, msg, "enable")
+		case "dbremove":
+			handlers.HandleDatabaseClusterAction(bot, msg, "remove")
+		case "migratebot":
+			handlers.HandleMigrationCommand(bot, msg)
+		case "migrationstatus":
+			handlers.HandleMigrationStatusCommand(bot, msg)
+		case "group":
+			handlers.HandleGroupCommand(bot, msg)
+
 		case "cancel":
 			handlers.HandleCancelCommand(bot, msg)
 		}

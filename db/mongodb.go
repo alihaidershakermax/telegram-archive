@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -14,19 +15,31 @@ import (
 )
 
 var (
-	client *mongo.Client
-	db     *mongo.Database
+	client           *mongo.Client
+	db               *mongo.Database
+	externalMu       sync.RWMutex
+	externalClients  = map[string]*mongo.Client{}
+	botClusterRoutes = map[int64]string{}
 )
 
 type botDatabaseKey struct{}
 
 // WithBotDatabase scopes archive queries to a dedicated MongoDB database.
 // The primary bot keeps using the configured legacy database when no scope is set.
+type botClusterKey struct{}
+
 func WithBotDatabase(ctx context.Context, telegramBotID int64) context.Context {
 	if telegramBotID == 0 {
 		return ctx
 	}
-	return context.WithValue(ctx, botDatabaseKey{}, fmt.Sprintf("archive_bot_%d", telegramBotID))
+	ctx = context.WithValue(ctx, botDatabaseKey{}, fmt.Sprintf("archive_bot_%d", telegramBotID))
+	externalMu.RLock()
+	clusterID := botClusterRoutes[telegramBotID]
+	externalMu.RUnlock()
+	if clusterID != "" {
+		ctx = context.WithValue(ctx, botClusterKey{}, clusterID)
+	}
+	return ctx
 }
 
 func ScopeKey(ctx context.Context) string {
@@ -41,10 +54,72 @@ func IsScoped(ctx context.Context) bool {
 }
 
 func databaseForContext(ctx context.Context) *mongo.Database {
-	if name, ok := ctx.Value(botDatabaseKey{}).(string); ok && name != "" && client != nil {
-		return client.Database(name)
+	name, _ := ctx.Value(botDatabaseKey{}).(string)
+	if name != "" {
+		if clusterID, ok := ctx.Value(botClusterKey{}).(string); ok && clusterID != "" {
+			externalMu.RLock()
+			external := externalClients[clusterID]
+			externalMu.RUnlock()
+			if external != nil {
+				return external.Database(name)
+			}
+		}
+		if client != nil {
+			return client.Database(name)
+		}
 	}
 	return db
+}
+
+// RegisterExternalClient verifies and keeps a separate MongoDB cluster connection.
+func RegisterExternalClient(ctx context.Context, clusterID, uri string) error {
+	pingCtx, cancel := context.WithTimeout(ctx, 12*time.Second)
+	defer cancel()
+	candidate, err := mongo.Connect(pingCtx, options.Client().ApplyURI(uri).SetServerSelectionTimeout(8*time.Second).SetConnectTimeout(8*time.Second))
+	if err != nil {
+		return err
+	}
+	if err := candidate.Ping(pingCtx, nil); err != nil {
+		_ = candidate.Disconnect(context.Background())
+		return err
+	}
+	externalMu.Lock()
+	old := externalClients[clusterID]
+	externalClients[clusterID] = candidate
+	externalMu.Unlock()
+	if old != nil {
+		_ = old.Disconnect(context.Background())
+	}
+	return nil
+}
+
+func DatabaseForCluster(clusterID, databaseName string) *mongo.Database {
+	if databaseName == "" {
+		return nil
+	}
+	if clusterID == "" {
+		if client == nil {
+			return nil
+		}
+		return client.Database(databaseName)
+	}
+	externalMu.RLock()
+	external := externalClients[clusterID]
+	externalMu.RUnlock()
+	if external == nil {
+		return nil
+	}
+	return external.Database(databaseName)
+}
+
+func SetBotClusterRoute(botID int64, clusterID string) {
+	externalMu.Lock()
+	defer externalMu.Unlock()
+	if clusterID == "" {
+		delete(botClusterRoutes, botID)
+		return
+	}
+	botClusterRoutes[botID] = clusterID
 }
 
 // ColScoped returns a collection from the bot-specific database when the
@@ -103,6 +178,7 @@ type indexSpec struct {
 
 var indexSpecs = []indexSpec{
 	{"users", bson.D{{Key: "user_id", Value: 1}}, true},
+	{"group_configs", bson.D{{Key: "bot_id", Value: 1}, {Key: "chat_id", Value: 1}}, true},
 	{"categories", bson.D{{Key: "cat_id", Value: 1}}, true},
 	{"categories", bson.D{{Key: "order", Value: 1}}, false},
 	{"subjects", bson.D{{Key: "sub_id", Value: 1}}, true},
@@ -134,6 +210,8 @@ var indexSpecs = []indexSpec{
 	{"ai_usage", bson.D{{Key: "operation", Value: 1}, {Key: "created_at", Value: -1}}, false},
 	{"ai_indexes", bson.D{{Key: "file_id", Value: 1}}, true},
 	{"expansion_states", bson.D{{Key: "status", Value: 1}, {Key: "next_eligible_at", Value: 1}}, false},
+	{"storage_clusters", bson.D{{Key: "name", Value: 1}}, true},
+	{"storage_clusters", bson.D{{Key: "status", Value: 1}, {Key: "updated_at", Value: -1}}, false},
 }
 
 // EnsureIndexes creates all required MongoDB indexes in the primary database.

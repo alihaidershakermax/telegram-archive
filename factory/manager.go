@@ -85,6 +85,9 @@ func NewManager(cfg *config.Config, handler func(*tgbotapi.BotAPI, tgbotapi.Upda
 func (m *Manager) DefaultOwnerID() int64 { return m.cfg.OwnerID }
 
 func (m *Manager) LoadAndStart(ctx context.Context) error {
+	if err := m.loadStorageClusters(ctx); err != nil {
+		log.Printf("Storage cluster restore warning: %v", err)
+	}
 	cursor, err := db.Col("managed_bots").Find(ctx, bson.M{"status": models.ManagedBotActive}, options.Find().SetSort(bson.D{{Key: "created_at", Value: 1}}))
 	if err != nil {
 		return err
@@ -140,18 +143,21 @@ func (m *Manager) Register(ctx context.Context, ownerID int64, token string) (*m
 	}
 	now := time.Now().UTC()
 	namespace, folder := botNamespace(bot.Self.UserName, bot.Self.ID)
+	clusterID := m.pickStorageCluster(ctx)
 	record := models.ManagedBot{
 
-		ID:                   newID(),
-		OwnerID:              ownerID,
-		TokenCiphertext:      ciphertext,
-		TokenNonce:           nonce,
-		TokenHash:            hash,
-		TelegramBotID:        bot.Self.ID,
-		Username:             bot.Self.UserName,
-		FirstName:            bot.Self.FirstName,
-		DatabaseName:         namespace,
-		StorageFolder:        folder,
+		ID:              newID(),
+		OwnerID:         ownerID,
+		TokenCiphertext: ciphertext,
+		TokenNonce:      nonce,
+		TokenHash:       hash,
+		TelegramBotID:   bot.Self.ID,
+		Username:        bot.Self.UserName,
+		FirstName:       bot.Self.FirstName,
+		DatabaseName:    namespace,
+		ClusterID:       clusterID,
+		StorageFolder:   folder,
+
 		StorageChannelID:     m.cfg.ArchiveChannelID,
 		MaxUsers:             m.cfg.FactoryDefaultMaxUsers,
 		MaxFiles:             m.cfg.FactoryDefaultMaxFiles,
@@ -166,9 +172,15 @@ func (m *Manager) Register(ctx context.Context, ownerID int64, token string) (*m
 	if _, err := db.Col("managed_bots").InsertOne(ctx, record); err != nil {
 		return nil, err
 	}
+	if clusterID != "" {
+		db.SetBotClusterRoute(record.TelegramBotID, clusterID)
+	}
 	if err := m.startWorker(record, bot); err != nil {
+
 		_, _ = db.Col("managed_bots").DeleteOne(ctx, bson.M{"_id": record.ID})
+		db.SetBotClusterRoute(record.TelegramBotID, "")
 		return nil, err
+
 	}
 	return &record, nil
 }
@@ -415,6 +427,9 @@ func (m *Manager) startRecord(ctx context.Context, record models.ManagedBot) err
 }
 
 func (m *Manager) startWorker(record models.ManagedBot, bot *tgbotapi.BotAPI) error {
+	if record.ClusterID != "" {
+		db.SetBotClusterRoute(record.TelegramBotID, record.ClusterID)
+	}
 	worker := &managedWorker{bot: bot, stop: make(chan struct{}), stats: &workerStats{}, closed: make(chan struct{})}
 	worker.stats.lastSeenUnix.Store(time.Now().Unix())
 	m.mu.Lock()
