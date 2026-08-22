@@ -157,7 +157,7 @@ The process listens on the platform-provided `PORT`. Do not hardcode a productio
 
 For Telegram long polling, configure Koyeb with `Minimum instances = 1`, disable Scale-to-Zero, and set the HTTP health check to `GET /healthz`. This keeps the controller and managed workers alive between incoming HTTP requests.
 
-For Telegram long polling, configure the Koyeb Service with **at least one permanent instance** (`Minimum instances = 1`) and disable Scale-to-Zero. A polling bot does not receive regular public HTTP traffic, so an idle policy can stop its process and interrupt updates. This applies to the parent and all managed child workers because they run inside the same process. Configure the HTTP health check as `GET /healthz` on the exposed `PORT`, with a startup grace period long enough for MongoDB and Telegram initialization. The endpoint is intentionally public, lightweight, and independent of database readiness.
+For Telegram long polling, configure the Koyeb Service with **at least one permanent instance** (`Minimum instances = 1`) and disable Scale-to-Zero. A polling bot does not receive regular public HTTP traffic, so an idle policy can stop its process and interrupt updates. This applies to the parent and all managed child workers because they run inside the same process. Configure the HTTP health check as `GET /healthz` on the exposed `PORT`, with a startup grace period long enough for MongoDB and Telegram initialization. The endpoint is intentionally public, lightweight, and independent of database readiness. The service also stores a short MongoDB lease for the parent and each managed Telegram bot, keyed by Telegram bot ID, so rolling deployments or multiple instances do not call `getUpdates` for the same bot concurrently.
 
 ## Bot Factory and API v2
 
@@ -178,7 +178,7 @@ curl -X POST -H "X-API-Key: $API_KEY" http://localhost:8000/api/v2/bots/<id>/res
 curl -X DELETE -H "X-API-Key: $API_KEY" http://localhost:8000/api/v2/bots/<id>
 ```
 
-The routing score prefers active bots with recent health, low observed latency, fewer active requests, and fewer consecutive errors. Telegram update streams remain isolated by token; the router selects a healthy bot for factory-managed jobs rather than attempting to merge Telegram sessions.
+The routing score prefers active bots with recent health, low observed latency, fewer active requests, and fewer consecutive errors. Telegram update streams remain isolated by token; the router selects a healthy bot for factory-managed jobs rather than attempting to merge Telegram sessions. A `409 Conflict: terminated by other getUpdates request` means another process is still polling the same Telegram bot. Stop the old service or deployment, verify that only one process owns the token, and inspect the lease log before changing application data.
 
 ## Lightweight Group Support
 

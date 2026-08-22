@@ -23,6 +23,10 @@ func primaryLeaseID(telegramBotID int64) string {
 	return fmt.Sprintf("primary:%d", telegramBotID)
 }
 
+func managedLeaseID(telegramBotID int64) string {
+	return fmt.Sprintf("managed:%d", telegramBotID)
+}
+
 // AcquirePrimaryLease reserves the parent bot's update stream for one service instance.
 func (m *Manager) AcquirePrimaryLease(ctx context.Context, telegramBotID int64) bool {
 	return m.acquireWorkerLease(ctx, primaryLeaseID(telegramBotID), telegramBotID)

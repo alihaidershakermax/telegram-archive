@@ -151,3 +151,10 @@
 
 - [x] منع تشغيل polling متزامن لنفس Telegram bot عبر أكثر من instance باستخدام distributed lease
 - [x] جعل health check لا يفتح اتصالاً متعارضاً مع polling وإضافة تشخيص واضح لـ 409 Conflict
+
+# Persistent Conflict Regression
+
+- [x] تحليل سجل التشغيل الجديد بعد نشر lease والتحقق من commit وعدد instances الفعلي
+- [x] تحديد العملية الثانية التي تستخدم BOT_TOKEN أو اكتشاف duplicate workers داخل نفس process
+- [x] منع التعارض النهائي واختبار أن child bot يستقبل الأوامر والملفات
+- [x] توثيق خطوات تنظيف Webhook وإيقاف الخدمة القديمة والتحقق من Telegram getUpdates

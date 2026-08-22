@@ -139,6 +139,11 @@ func (m *Manager) Register(ctx context.Context, ownerID int64, token string) (*m
 	if err != nil {
 		return nil, fmt.Errorf("telegram token validation failed: %w", err)
 	}
+	if err := db.Col("managed_bots").FindOne(ctx, bson.M{"telegram_bot_id": bot.Self.ID}).Err(); err == nil {
+		return nil, errors.New("this Telegram bot is already registered")
+	} else if !errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, err
+	}
 	ciphertext, nonce, err := m.cipher.Encrypt(token)
 	if err != nil {
 		return nil, err
@@ -488,14 +493,15 @@ func (m *Manager) startWorker(record models.ManagedBot, bot *tgbotapi.BotAPI) er
 func (m *Manager) poll(id string, worker *managedWorker) {
 	defer close(worker.closed)
 	leaseCtx, cancelLease := context.WithTimeout(context.Background(), 10*time.Second)
-	claimed := m.acquireWorkerLease(leaseCtx, id, worker.bot.Self.ID)
+	leaseID := managedLeaseID(worker.bot.Self.ID)
+	claimed := m.acquireWorkerLease(leaseCtx, leaseID, worker.bot.Self.ID)
 	cancelLease()
 	if !claimed {
 		log.Printf("managed bot %s skipped: another instance owns its polling lease", id)
 		m.removeWorker(id, worker)
 		return
 	}
-	defer m.releaseWorkerLease(context.Background(), id)
+	defer m.releaseWorkerLease(context.Background(), leaseID)
 
 	if _, err := worker.bot.Request(tgbotapi.DeleteWebhookConfig{DropPendingUpdates: false}); err != nil {
 		log.Printf("managed bot %d webhook cleanup failed: %v", worker.bot.Self.ID, err)
@@ -515,7 +521,8 @@ func (m *Manager) poll(id string, worker *managedWorker) {
 				return
 			case <-ticker.C:
 				renewCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-				ok := m.renewWorkerLease(renewCtx, id)
+				ok := m.renewWorkerLease(renewCtx, leaseID)
+
 				cancel()
 				if !ok {
 					close(leaseLost)
