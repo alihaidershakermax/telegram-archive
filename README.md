@@ -106,6 +106,10 @@ The health endpoint is available at `GET /api/v1/health`. A successful response 
 | `/unban <id>` | Remove a user ban when authorized |
 | `/ai <question>` | Ask the configured AI gateway |
 | `/summarize <text>` | Summarize text through the configured AI gateway |
+| `/subscribe <subject_id>` | Subscribe to a subject and receive new-file notifications |
+| `/unsubscribe <subject_id>` | Cancel a subject subscription |
+| `/subscriptions` | List current subject subscriptions |
+| `/vault` | List the user's Personal Vault metadata |
 
 ## HTTP API
 
@@ -119,6 +123,8 @@ GET  /api/v1/files?subject_id=1
 POST /api/v1/bundle
 POST /api/v1/ai/chat
 POST /api/v1/ai/summarize
+GET  /api/v2/groups/{chat_id}
+PATCH /api/v2/groups/{chat_id}
 ```
 
 The bundle route accepts `{"file_ids":[1,2]}` and requires `X-Telegram-User-ID`. It enforces a maximum of 20 files and a 100 MB generated bundle limit, then sends the ZIP to that Telegram user.

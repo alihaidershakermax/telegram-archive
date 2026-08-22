@@ -88,6 +88,7 @@ func main() {
 		{Command: "unsubscribe", Description: "🔕 إلغاء اشتراك مادة"},
 		{Command: "subscriptions", Description: "📚 اشتراكاتي"},
 		{Command: "vault", Description: "🔐 Personal Vault"},
+		{Command: "vaultadd", Description: "➕ حفظ ملف في Vault"},
 
 		{Command: "cancel", Description: "❌ إلغاء العملية"},
 	}
@@ -216,6 +217,8 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 			handlers.HandleSubscriptionsCommand(bot, msg)
 		case "vault":
 			handlers.HandleVaultCommand(bot, msg)
+		case "vaultadd":
+			handlers.HandleVaultAddCommand(bot, msg)
 
 		case "cancel":
 			handlers.HandleCancelCommand(bot, msg)

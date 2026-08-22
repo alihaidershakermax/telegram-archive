@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"telegram-archive-bot/models"
 	"telegram-archive-bot/services"
 )
 
@@ -65,6 +64,22 @@ func HandleSubscriptionsCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message)
 	_, _ = bot.Send(tgbotapi.NewMessage(message.Chat.ID, b.String()))
 }
 
+func HandleVaultAddCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
+	if message == nil || message.From == nil || message.Chat == nil {
+		return
+	}
+	id, err := strconv.Atoi(strings.TrimSpace(message.CommandArguments()))
+	if err != nil || id <= 0 {
+		_, _ = bot.Send(tgbotapi.NewMessage(message.Chat.ID, "الاستخدام: /vaultadd <file_id>"))
+		return
+	}
+	if err := services.AddToVault(archiveContext(bot), bot.Self.ID, message.From.ID, id); err != nil {
+		_, _ = bot.Send(tgbotapi.NewMessage(message.Chat.ID, "❌ تعذر حفظ الملف في خزنتك."))
+		return
+	}
+	_, _ = bot.Send(tgbotapi.NewMessage(message.Chat.ID, "✅ تمت إضافة الملف إلى Personal Vault."))
+}
+
 func HandleVaultCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 	if message == nil || message.From == nil || message.Chat == nil {
 		return
@@ -85,5 +100,3 @@ func HandleVaultCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 	}
 	_, _ = bot.Send(tgbotapi.NewMessage(message.Chat.ID, b.String()))
 }
-
-var _ = models.VaultItem{}
