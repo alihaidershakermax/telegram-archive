@@ -241,6 +241,25 @@ func (m *Manager) Get(ctx context.Context, id string, ownerID int64, includeAll 
 	return &row, nil
 }
 
+// AssignDelegatedAdmin records the person who receives administration of a child bot.
+// It never transfers the encrypted token or Bot Factory ownership.
+func (m *Manager) AssignDelegatedAdmin(ctx context.Context, botRecordID string, ownerID, delegatedAdminID int64) (*models.ManagedBot, error) {
+	if delegatedAdminID <= 0 {
+		return nil, errors.New("delegated admin id is required")
+	}
+	row, err := m.Get(ctx, botRecordID, ownerID, false)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	if _, err := db.Col("managed_bots").UpdateOne(ctx, bson.M{"_id": row.ID, "owner_id": ownerID}, bson.M{"$set": bson.M{"delegated_admin_id": delegatedAdminID, "handed_off_at": now, "updated_at": now}}); err != nil {
+		return nil, err
+	}
+	row.DelegatedAdminID = delegatedAdminID
+	row.HandedOffAt = now
+	return row, nil
+}
+
 // GetByTelegramBotID returns a managed bot by its Telegram identity.
 func (m *Manager) GetByTelegramBotID(ctx context.Context, telegramBotID int64) (*models.ManagedBot, error) {
 	if telegramBotID <= 0 {
@@ -467,6 +486,9 @@ func (m *Manager) startWorker(record models.ManagedBot, bot *tgbotapi.BotAPI) er
 
 func (m *Manager) poll(id string, worker *managedWorker) {
 	defer close(worker.closed)
+	if _, err := worker.bot.Request(tgbotapi.DeleteWebhookConfig{DropPendingUpdates: false}); err != nil {
+		log.Printf("managed bot %d webhook cleanup failed: %v", worker.bot.Self.ID, err)
+	}
 	updateConfig := tgbotapi.NewUpdate(0)
 	updateConfig.Timeout = 30
 	updates := worker.bot.GetUpdatesChan(updateConfig)

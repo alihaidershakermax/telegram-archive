@@ -7,6 +7,17 @@ import (
 	"telegram-archive-bot/config"
 )
 
+func TestHandoffIDValidation(t *testing.T) {
+	if got, err := parsePositiveInt64("123456789"); err != nil || got != 123456789 {
+		t.Fatalf("expected valid Telegram user id, got %d/%v", got, err)
+	}
+	for _, value := range []string{"0", "-1", "abc"} {
+		if _, err := parsePositiveInt64(value); err == nil {
+			t.Fatalf("expected %q to be rejected", value)
+		}
+	}
+}
+
 func TestParentBotOwnerOnlyFactoryAccess(t *testing.T) {
 	oldCfg := config.Cfg
 	config.Cfg = &config.Config{OwnerID: 42}

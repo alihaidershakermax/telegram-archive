@@ -106,6 +106,7 @@ The health endpoint is available at `GET /api/v1/health`. A successful response 
 | `/unban <id>` | Remove a user ban when authorized |
 | `/ai <question>` | Ask the configured AI gateway |
 | `/summarize <text>` | Summarize text through the configured AI gateway |
+| `/handoff <bot_id> <telegram_user_id> [rank]` | Give a person scoped admin access inside a managed bot; parent ownership is retained |
 | `/subscribe <subject_id>` | Subscribe to a subject and receive new-file notifications |
 | `/unsubscribe <subject_id>` | Cancel a subject subscription |
 | `/subscriptions` | List current subject subscriptions |
@@ -163,6 +164,8 @@ For Telegram long polling, configure the Koyeb Service with **at least one perma
 Bot Factory is controlled exclusively by the owner of the parent bot. The service validates each token created through BotFather, encrypts it with AES-256-GCM before persistence, keeps only safe metadata in API responses, and starts an isolated long-polling worker for each active bot. Factory commands and the factory callback are rejected on child bots and for all non-owner users. Child workers receive their own public command menu and route messages, callbacks, and file updates through the same application handler.
 
 Set `FACTORY_ENCRYPTION_KEY` to a random 32-byte key encoded as 64 hexadecimal characters or base64. Never reuse `API_KEY`, never commit the value, and rotate it only through a planned re-encryption migration. `FACTORY_MAX_BOTS_PER_OWNER` limits registrations and `FACTORY_WORKERS` documents the worker capacity for future queued jobs.
+
+To deliver a complete managed bot to a specific person, the parent owner runs `/handoff <managed_bot_id> <telegram_user_id> [rank]`. The default rank is `admin`; the allowed delegated ranks are `admin`, `moderator`, `editor`, and `viewer`. This adds the person to that child bot's isolated `admins` collection and records the handoff, but it does not transfer the encrypted token or Bot Factory ownership. The recipient must open the child bot and send `/start` before the bot can send a private response.
 
 ```bash
 curl -H "X-API-Key: $API_KEY" http://localhost:8000/api/v2/bots

@@ -2,12 +2,14 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 
+	"telegram-archive-bot/db"
 	"telegram-archive-bot/factory"
 	"telegram-archive-bot/models"
 	"telegram-archive-bot/services"
@@ -68,6 +70,65 @@ func HandleMyBotsCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 		fmt.Fprintf(&b, "• @%s — %s\n  ID: %s | Updates: %d | Errors: %d\n", row.Username, row.Status, row.ID, row.TotalUpdates, row.TotalErrors)
 	}
 	bot.Send(tgbotapi.NewMessage(message.Chat.ID, b.String()))
+}
+
+// HandleHandoffCommand gives a specific Telegram user admin access inside one child bot.
+// Bot Factory ownership and encrypted token custody remain with the parent owner.
+func HandleHandoffCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
+	if message == nil || message.From == nil || message.Chat == nil || !isParentBotOwner(bot, message.From.ID) {
+		if message != nil && message.Chat != nil {
+			bot.Send(tgbotapi.NewMessage(message.Chat.ID, "⛔ تسليم البوت متاح لمالك البوت الأب فقط."))
+		}
+		return
+	}
+	if botFactory == nil {
+		bot.Send(tgbotapi.NewMessage(message.Chat.ID, "⚠️ Bot Factory غير مفعّل حالياً."))
+		return
+	}
+	parts := strings.Fields(message.CommandArguments())
+	if len(parts) < 2 || len(parts) > 3 {
+		bot.Send(tgbotapi.NewMessage(message.Chat.ID, "❌ الاستخدام: /handoff <managed_bot_id> <telegram_user_id> [admin|moderator|editor|viewer]"))
+		return
+	}
+	delegatedID, err := parsePositiveInt64(parts[1])
+	if err != nil {
+		bot.Send(tgbotapi.NewMessage(message.Chat.ID, "❌ telegram_user_id غير صالح."))
+		return
+	}
+	rank := "admin"
+	if len(parts) == 3 {
+		rank = parts[2]
+	}
+	if _, ok := services.RankLevels[rank]; !ok || rank == "owner" || rank == "super_admin" {
+		bot.Send(tgbotapi.NewMessage(message.Chat.ID, "❌ الرتبة يجب أن تكون admin أو moderator أو editor أو viewer."))
+		return
+	}
+	ctx := context.Background()
+	row, err := botFactory.Get(ctx, parts[0], message.From.ID, false)
+	if err != nil {
+		bot.Send(tgbotapi.NewMessage(message.Chat.ID, "❌ لم يتم العثور على البوت. استخدم المعرّف الظاهر في /mybots."))
+		return
+	}
+	botCtx := db.WithBotDatabase(ctx, row.TelegramBotID)
+	if err := services.AddAdmin(botCtx, delegatedID, "", "Delegated admin", rank); err != nil {
+		bot.Send(tgbotapi.NewMessage(message.Chat.ID, "❌ تعذر إضافة الأدمن داخل قاعدة البوت."))
+		return
+	}
+	if _, err := botFactory.AssignDelegatedAdmin(ctx, row.ID, message.From.ID, delegatedID); err != nil {
+		_ = services.RemoveAdmin(botCtx, delegatedID)
+		bot.Send(tgbotapi.NewMessage(message.Chat.ID, "❌ تعذر تثبيت عملية التسليم، وتم التراجع عن إضافة الأدمن."))
+		return
+	}
+	services.LogAdminAction(ctx, message.From.ID, "handoff_managed_bot", map[string]interface{}{"bot_id": row.ID, "telegram_bot_id": row.TelegramBotID, "delegated_admin_id": delegatedID, "rank": rank})
+	bot.Send(tgbotapi.NewMessage(message.Chat.ID, fmt.Sprintf("✅ تم تسليم إدارة @%s للمستخدم %d برتبة %s.\n\nملكية Bot Factory والتوكن المشفّر بقيتا لديك.", row.Username, delegatedID, rank)))
+}
+
+func parsePositiveInt64(value string) (int64, error) {
+	var n int64
+	if _, err := fmt.Sscan(value, &n); err != nil || n <= 0 {
+		return 0, errors.New("invalid positive integer")
+	}
+	return n, nil
 }
 
 // HandleDatabasePanelCommand shows cluster management controls in the parent bot.

@@ -75,6 +75,8 @@ func main() {
 		{Command: "summarize", Description: "📝 تلخيص نص"},
 		{Command: "newbot", Description: "🤖 إضافة بوت مُدار"},
 		{Command: "mybots", Description: "📊 بوتاتي المُدارة"},
+		{Command: "handoff", Description: "🤝 تسليم إدارة بوت لشخص"},
+
 		{Command: "dbpanel", Description: "🗄 لوحة قواعد البيانات"},
 		{Command: "adddb", Description: "➕ إضافة MongoDB Cluster"},
 		{Command: "dbs", Description: "📋 عرض MongoDB Clusters"},
@@ -191,6 +193,9 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 			handlers.HandleNewBotCommand(bot, msg)
 		case "mybots":
 			handlers.HandleMyBotsCommand(bot, msg)
+		case "handoff":
+			handlers.HandleHandoffCommand(bot, msg)
+
 		case "dbpanel":
 			handlers.HandleDatabasePanelCommand(bot, msg)
 		case "adddb":

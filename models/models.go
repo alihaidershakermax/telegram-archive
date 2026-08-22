@@ -80,6 +80,8 @@ type SharedFile struct {
 type ManagedBot struct {
 	ID                   string    `bson:"_id" json:"id"`
 	OwnerID              int64     `bson:"owner_id" json:"owner_id"`
+	DelegatedAdminID     int64     `bson:"delegated_admin_id,omitempty" json:"delegated_admin_id,omitempty"`
+	HandedOffAt          time.Time `bson:"handed_off_at,omitempty" json:"handed_off_at,omitempty"`
 	TokenCiphertext      string    `bson:"token_ciphertext" json:"-"`
 	TokenNonce           string    `bson:"token_nonce" json:"-"`
 	TokenHash            string    `bson:"token_hash" json:"-"`
