@@ -37,3 +37,19 @@
 - [x] إضافة اختبارات وتوثيق ومزامنة Release للعزل
 - [x] جعل البوت الرئيسي Storage Gateway لإرسال ملفات قناة التخزين المشتركة نيابة عن البوتات المُدارة
 - [x] ربط namespace البوت بمجلد منطقي مستقل دون اشتراط صلاحية قناة للبوت الفرعي
+
+# Bot Factory Production Expansion
+
+- [x] إضافة Storage Gateway Queue دائمة في MongoDB لإرسال الملفات عبر البوت الرئيسي
+- [x] إضافة Retry ذكي مع exponential backoff وdead-letter status لطلبات التخزين
+- [x] إضافة حدود مستقلة لكل بوت للاستخدام والملفات والطلبات
+- [x] إضافة usage counters وواجهات إحصائيات لكل namespace
+- [x] إضافة health dashboard/API للبوتات مع latency وerrors وqueue depth
+- [x] إضافة أدوار مستقلة لكل بوت: owner وadmin وeditor وviewer
+- [x] إضافة audit log موحد لكل تغييرات الإدارة داخل namespace البوت
+- [x] إضافة Maintenance mode مستقل لكل بوت
+- [x] إضافة backup وrestore لقاعدة بوت واحد دون التأثير على البقية
+- [x] إضافة تدوير آمن لتوكن البوت مع الحفاظ على database namespace
+- [x] إضافة API keys مستقلة بصلاحيات محددة لكل بوت
+- [x] إضافة AI Gateway scoped مع فهرسة وتصنيف وتلخيص خاص بكل بوت
+- [ ] إضافة اختبارات وتوثيق ومزامنة Release لكل ميزات التوسعة

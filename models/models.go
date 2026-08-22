@@ -78,33 +78,100 @@ type SharedFile struct {
 
 // ManagedBot represents a user-owned bot registered in the Bot Factory.
 type ManagedBot struct {
-	ID                string    `bson:"_id" json:"id"`
-	OwnerID           int64     `bson:"owner_id" json:"owner_id"`
-	TokenCiphertext   string    `bson:"token_ciphertext" json:"-"`
-	TokenNonce        string    `bson:"token_nonce" json:"-"`
-	TokenHash         string    `bson:"token_hash" json:"-"`
-	TelegramBotID     int64     `bson:"telegram_bot_id" json:"telegram_bot_id"`
-	Username          string    `bson:"username" json:"username"`
-	FirstName         string    `bson:"first_name,omitempty" json:"first_name,omitempty"`
-	DatabaseName      string    `bson:"database_name" json:"database_name"`
-	StorageFolder     string    `bson:"storage_folder" json:"storage_folder"`
-	StorageChannelID  int64     `bson:"storage_channel_id" json:"storage_channel_id"`
-	Status            string    `bson:"status" json:"status"`
-	CreatedAt         time.Time `bson:"created_at" json:"created_at"`
-	UpdatedAt         time.Time `bson:"updated_at" json:"updated_at"`
-	LastSeenAt        time.Time `bson:"last_seen_at,omitempty" json:"last_seen_at,omitempty"`
-	LastError         string    `bson:"last_error,omitempty" json:"last_error,omitempty"`
-	ConsecutiveErrors int       `bson:"consecutive_errors" json:"consecutive_errors"`
-	TotalUpdates      int64     `bson:"total_updates" json:"total_updates"`
-	TotalErrors       int64     `bson:"total_errors" json:"total_errors"`
-	ActiveRequests    int64     `bson:"-" json:"active_requests"`
-	LastLatencyMS     int64     `bson:"-" json:"last_latency_ms"`
+	ID                   string    `bson:"_id" json:"id"`
+	OwnerID              int64     `bson:"owner_id" json:"owner_id"`
+	TokenCiphertext      string    `bson:"token_ciphertext" json:"-"`
+	TokenNonce           string    `bson:"token_nonce" json:"-"`
+	TokenHash            string    `bson:"token_hash" json:"-"`
+	TelegramBotID        int64     `bson:"telegram_bot_id" json:"telegram_bot_id"`
+	Username             string    `bson:"username" json:"username"`
+	FirstName            string    `bson:"first_name,omitempty" json:"first_name,omitempty"`
+	DatabaseName         string    `bson:"database_name" json:"database_name"`
+	StorageFolder        string    `bson:"storage_folder" json:"storage_folder"`
+	StorageChannelID     int64     `bson:"storage_channel_id" json:"storage_channel_id"`
+	MaxUsers             int64     `bson:"max_users" json:"max_users"`
+	MaxFiles             int64     `bson:"max_files" json:"max_files"`
+	MaxStorageBytes      int64     `bson:"max_storage_bytes" json:"max_storage_bytes"`
+	MaxRequestsPerMinute int       `bson:"max_requests_per_minute" json:"max_requests_per_minute"`
+	Status               string    `bson:"status" json:"status"`
+	CreatedAt            time.Time `bson:"created_at" json:"created_at"`
+	UpdatedAt            time.Time `bson:"updated_at" json:"updated_at"`
+	LastSeenAt           time.Time `bson:"last_seen_at,omitempty" json:"last_seen_at,omitempty"`
+	LastError            string    `bson:"last_error,omitempty" json:"last_error,omitempty"`
+	ConsecutiveErrors    int       `bson:"consecutive_errors" json:"consecutive_errors"`
+	TotalUpdates         int64     `bson:"total_updates" json:"total_updates"`
+	TotalErrors          int64     `bson:"total_errors" json:"total_errors"`
+	ActiveRequests       int64     `bson:"-" json:"active_requests"`
+	LastLatencyMS        int64     `bson:"-" json:"last_latency_ms"`
 }
 
 const (
 	ManagedBotActive    = "active"
 	ManagedBotPaused    = "paused"
 	ManagedBotUnhealthy = "unhealthy"
+)
+
+// AIIndex stores AI-generated metadata for a file inside one bot namespace.
+type AIIndex struct {
+	FileID      int       `bson:"file_id" json:"file_id"`
+	Summary     string    `bson:"summary" json:"summary"`
+	Tags        []string  `bson:"tags" json:"tags"`
+	ContentHash string    `bson:"content_hash" json:"content_hash"`
+	UpdatedAt   time.Time `bson:"updated_at" json:"updated_at"`
+}
+
+// BotBackup records a snapshot of one isolated bot database.
+type BotBackup struct {
+	ID          string         `bson:"_id" json:"id"`
+	BotID       int64          `bson:"bot_id" json:"bot_id"`
+	Status      string         `bson:"status" json:"status"`
+	Collections map[string]int `bson:"collections" json:"collections"`
+	CreatedAt   time.Time      `bson:"created_at" json:"created_at"`
+	CompletedAt *time.Time     `bson:"completed_at,omitempty" json:"completed_at,omitempty"`
+	Error       string         `bson:"error,omitempty" json:"error,omitempty"`
+}
+
+const (
+	BackupPending   = "pending"
+	BackupCompleted = "completed"
+	BackupFailed    = "failed"
+)
+
+// APIKey stores only a hash of a bot-scoped API credential.
+type APIKey struct {
+	ID          string     `bson:"_id" json:"id"`
+	BotID       int64      `bson:"bot_id" json:"bot_id"`
+	Name        string     `bson:"name" json:"name"`
+	KeyHash     string     `bson:"key_hash" json:"-"`
+	Prefix      string     `bson:"prefix" json:"prefix"`
+	Permissions []string   `bson:"permissions" json:"permissions"`
+	CreatedAt   time.Time  `bson:"created_at" json:"created_at"`
+	RevokedAt   *time.Time `bson:"revoked_at,omitempty" json:"revoked_at,omitempty"`
+}
+
+// StorageJob represents a durable delivery request handled by the primary Storage Gateway.
+type StorageJob struct {
+	ID             string    `bson:"_id" json:"id"`
+	BotID          int64     `bson:"bot_id" json:"bot_id"`
+	ChatID         int64     `bson:"chat_id" json:"chat_id"`
+	TelegramFileID string    `bson:"telegram_file_id" json:"-"`
+	FileType       string    `bson:"file_type" json:"file_type"`
+	Caption        string    `bson:"caption,omitempty" json:"caption,omitempty"`
+	Status         string    `bson:"status" json:"status"`
+	Attempts       int       `bson:"attempts" json:"attempts"`
+	NextAttemptAt  time.Time `bson:"next_attempt_at" json:"next_attempt_at"`
+	LastError      string    `bson:"last_error,omitempty" json:"last_error,omitempty"`
+	CreatedAt      time.Time `bson:"created_at" json:"created_at"`
+	UpdatedAt      time.Time `bson:"updated_at" json:"updated_at"`
+	CompletedAt    time.Time `bson:"completed_at,omitempty" json:"completed_at,omitempty"`
+}
+
+const (
+	StorageJobPending    = "pending"
+	StorageJobProcessing = "processing"
+	StorageJobSent       = "sent"
+	StorageJobRetrying   = "retrying"
+	StorageJobDead       = "dead"
 )
 
 // BotSetting represents a key-value setting stored in the database.

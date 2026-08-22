@@ -82,7 +82,7 @@ The summarization endpoint accepts up to 100,000 UTF-8 bytes per request and ret
 
 ## Recommended deployment
 
-Keep `API_KEY`, `AI_API_KEY`, and `BOT_TOKEN` in the deployment secret store. Place the service behind HTTPS, restrict the API port to trusted clients, rotate keys periodically, and add a separate gateway or reverse proxy if multiple consumers need different quotas or scopes. The current first version uses one application key; scoped keys, JWT/OAuth, usage accounting, and a persistent job queue should be added before opening the API to third parties.
+Keep `API_KEY`, `AI_API_KEY`, and `BOT_TOKEN` in the deployment secret store. Place the service behind HTTPS, restrict the API port to trusted clients, rotate keys periodically, and add a separate gateway or reverse proxy if multiple consumers need different quotas or scopes. The API now supports a master application key plus bot-scoped API keys, usage accounting, and a persistent Storage Gateway queue. Keep all key material in the deployment secret store, restrict management endpoints to the master key, and rotate the master key and scoped keys periodically.
 
 ## Bot Factory API v2
 
@@ -100,6 +100,18 @@ Before enabling the factory, set `FACTORY_ENCRYPTION_KEY` to a random 32-byte va
 | `POST` | `/api/v2/bots/{id}/resume` | Revalidates the encrypted token and restarts polling |
 | `DELETE` | `/api/v2/bots/{id}` | Stops the worker and permanently deletes the registration |
 | `GET` | `/api/v2/router/best` | Selects the healthiest available bot using live routing signals |
+| `POST` | `/api/v2/bots/{id}/limits` | Updates per-bot user, file, storage, and requests-per-minute limits |
+| `GET` | `/api/v2/bots/{id}/usage` | Returns usage from the bot's isolated database and its storage queue counters |
+| `POST` | `/api/v2/bots/{id}/rotate-token` | Replaces a token while requiring the same Telegram bot ID |
+| `GET` | `/api/v2/bots/{id}/backups` | Lists snapshots for one bot database |
+| `POST` | `/api/v2/bots/{id}/backup` | Creates a snapshot of one bot database |
+| `POST` | `/api/v2/bots/{id}/restore` | Restores a completed snapshot for that bot only |
+| `POST` | `/api/v2/bots/{id}/ai-index` | Creates a scoped AI summary and tag index for one archive file |
+| `GET` | `/api/v2/bots/{id}/api-keys` | Lists scoped API key metadata without secrets |
+| `POST` | `/api/v2/bots/{id}/api-keys` | Creates a scoped API key; returns the secret once |
+| `DELETE` | `/api/v2/bots/{id}/api-keys` | Revokes a scoped API key by JSON body ID |
+| `GET` | `/api/v2/storage/queue` | Returns pending, retrying, sent, and dead-letter counters |
+| `GET` | `/api/v2/monitor` | Returns per-bot health, usage, and queue metrics |
 
 ```bash
 curl -H "X-API-Key: $API_KEY" http://localhost:8000/api/v2/bots
@@ -116,6 +128,37 @@ curl -X DELETE -H "X-API-Key: $API_KEY" http://localhost:8000/api/v2/bots/<id>
 ```
 
 The intelligent routing score uses health recency, observed latency, active requests, consecutive errors, and accumulated errors. Telegram update streams cannot be merged across tokens, so the selector chooses a healthy bot for factory-managed outbound work rather than moving one Telegram session between tokens. All v2 responses intentionally omit token ciphertext, nonce, hash, and plaintext.
+
+### Storage Queue and limits
+
+The primary bot remains the only Storage Gateway. A failed delivery is persisted in `storage_jobs` and retried with exponential backoff. After `STORAGE_MAX_ATTEMPTS`, the job receives `dead` status for operator review. Stale `processing` jobs are reclaimed after two minutes, which protects delivery after a process crash.
+
+Default limits for newly registered bots are configured with `FACTORY_DEFAULT_MAX_USERS`, `FACTORY_DEFAULT_MAX_FILES`, `FACTORY_DEFAULT_MAX_STORAGE_BYTES`, and `FACTORY_DEFAULT_MAX_REQUESTS_PER_MINUTE`. A value of zero means unlimited for that limit. Queue behavior is configured with `STORAGE_QUEUE_POLL_SECONDS`, `STORAGE_MAX_ATTEMPTS`, `STORAGE_RETRY_BASE_SECONDS`, and `STORAGE_QUEUE_BATCH_SIZE`.
+
+```bash
+curl -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \\
+  -d '{"max_users":5000,"max_files":10000,"max_storage_bytes":5368709120,"max_requests_per_minute":120}' \\
+  http://localhost:8000/api/v2/bots/<id>/limits
+
+curl -H "X-API-Key: $API_KEY" http://localhost:8000/api/v2/bots/<id>/usage
+curl -H "X-API-Key: $API_KEY" http://localhost:8000/api/v2/monitor
+```
+
+### Scoped API keys
+
+The platform operator creates a bot-scoped key through the master `API_KEY`. The returned `secret` is shown only once. Subsequent archive requests must include both the scoped key and the matching `X-Telegram-Bot-ID`; the middleware rejects mismatches before database access. Supported permissions are `archive:read`, `archive:write`, `archive:delete`, `bot:analytics`, and `bot:settings`.
+
+```bash
+curl -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \\
+  -d '{"name":"mobile-client","permissions":["archive:read"]}' \\
+  http://localhost:8000/api/v2/bots/<id>/api-keys
+
+curl -H "X-API-Key: taf_REDACTED" \\
+  -H "X-Telegram-Bot-ID: 123456789" \\
+  http://localhost:8000/api/v1/categories
+```
+
+Backups are stored in the primary database as metadata plus per-document snapshot records. Restore is explicitly scoped by both `bot_id` and `backup_id`; it never touches another bot database or the factory registration metadata. AI requests that include `X-Telegram-Bot-ID` are logged in that bot's `ai_usage` collection, keeping operational usage separate. `POST /api/v2/bots/{id}/ai-index` accepts `{ "file_id": 1, "text": "..." }`, verifies that the file belongs to the selected bot database, requests a JSON summary and tags from the configured provider, and stores the result in that bot's `ai_indexes` collection.
 
 ## Bot Factory Telegram commands
 

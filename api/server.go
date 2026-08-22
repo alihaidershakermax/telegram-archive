@@ -21,8 +21,11 @@ import (
 	"telegram-archive-bot/config"
 	"telegram-archive-bot/db"
 	"telegram-archive-bot/factory"
+	"telegram-archive-bot/models"
 	"telegram-archive-bot/services"
 )
+
+type apiKeyContextKey struct{}
 
 type Server struct {
 	bot           *tgbotapi.BotAPI
@@ -100,6 +103,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v2/bots/", s.withAuth(s.factoryV2Bot))
 	mux.HandleFunc("/api/v2/router/best", s.withAuth(s.factoryV2Router))
 	mux.HandleFunc("/api/v2/router/send", s.withAuth(s.factoryV2Send))
+	mux.HandleFunc("/api/v2/storage/queue", s.withAuth(s.storageQueue))
+	mux.HandleFunc("/api/v2/monitor", s.withAuth(s.factoryMonitor))
 	mux.HandleFunc("/api/v1/categories", s.withAuth(s.categories))
 	mux.HandleFunc("/api/v1/subjects", s.withAuth(s.subjects))
 	mux.HandleFunc("/api/v1/files", s.withAuth(s.files))
@@ -120,17 +125,35 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) withAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if s.apiKey == "" {
-			writeError(w, http.StatusServiceUnavailable, "api is not configured")
-			return
-		}
-		provided := r.Header.Get("X-API-Key")
+		provided := strings.TrimSpace(r.Header.Get("X-API-Key"))
 		if provided == "" {
-			provided = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+			provided = strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
 		}
-		if provided == "" || subtle.ConstantTimeCompare([]byte(provided), []byte(s.apiKey)) != 1 {
+		if provided == "" {
 			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
+		}
+
+		isMaster := s.apiKey != "" && subtle.ConstantTimeCompare([]byte(provided), []byte(s.apiKey)) == 1
+		var scopedKey *models.APIKey
+		if !isMaster {
+			var err error
+			scopedKey, err = services.VerifyAPIKey(r.Context(), provided)
+			if err != nil || scopedKey == nil || !apiKeyPathAllowed(r.URL.Path) {
+				writeError(w, http.StatusUnauthorized, "unauthorized")
+				return
+			}
+			rawBotID := strings.TrimSpace(r.Header.Get("X-Telegram-Bot-ID"))
+			botID, parseErr := strconv.ParseInt(rawBotID, 10, 64)
+			if parseErr != nil || botID <= 0 || botID != scopedKey.BotID {
+				writeError(w, http.StatusForbidden, "API key bot scope mismatch")
+				return
+			}
+			required := apiKeyPermissionForRequest(r)
+			if required != "" && !services.HasAPIKeyPermission(scopedKey, required) {
+				writeError(w, http.StatusForbidden, "API key permission denied")
+				return
+			}
 		}
 		key := provided
 		if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
@@ -140,8 +163,29 @@ func (s *Server) withAuth(next http.HandlerFunc) http.HandlerFunc {
 			writeError(w, http.StatusTooManyRequests, "rate limit exceeded")
 			return
 		}
+		if scopedKey != nil {
+			r = r.WithContext(context.WithValue(r.Context(), apiKeyContextKey{}, scopedKey))
+		}
 		next(w, r)
 	}
+}
+
+func apiKeyPathAllowed(path string) bool {
+	return strings.HasPrefix(path, "/api/v1/categories") ||
+		strings.HasPrefix(path, "/api/v1/subjects") ||
+		strings.HasPrefix(path, "/api/v1/files") ||
+		strings.HasPrefix(path, "/api/v1/bundle") ||
+		strings.HasPrefix(path, "/api/v1/ai/")
+}
+
+func apiKeyPermissionForRequest(r *http.Request) string {
+	if strings.HasPrefix(r.URL.Path, "/api/v1/ai/") {
+		return "archive:read"
+	}
+	if r.Method == http.MethodGet {
+		return "archive:read"
+	}
+	return "archive:write"
 }
 
 func (s *Server) allow(key string) bool {
@@ -243,9 +287,19 @@ func (s *Server) aiChat(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "messages are required")
 		return
 	}
+	archiveCtx, err := s.archiveContextFromRequest(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	inputChars := 0
+	for _, message := range body.Messages {
+		inputChars += len(message.Content)
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	defer cancel()
 	result, err := s.ai.Chat(ctx, body.ChatRequest)
+	_ = services.RecordAIUsage(archiveCtx, "chat", inputChars, err == nil)
 	if err != nil {
 		handleAIError(w, err)
 		return
@@ -276,9 +330,15 @@ func (s *Server) aiSummarize(w http.ResponseWriter, r *http.Request) {
 		style = "concise educational"
 	}
 	prompt := "Summarize the following educational text in " + language + ". Style: " + style + ". Preserve key facts and return a clear summary.\n\n" + body.Text
+	archiveCtx, err := s.archiveContextFromRequest(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	defer cancel()
 	result, err := s.ai.Chat(ctx, ai.ChatRequest{Messages: []ai.Message{{Role: "system", Content: "You are an accurate educational summarization assistant."}, {Role: "user", Content: prompt}}})
+	_ = services.RecordAIUsage(archiveCtx, "summarize", len(body.Text), err == nil)
 	if err != nil {
 		handleAIError(w, err)
 		return

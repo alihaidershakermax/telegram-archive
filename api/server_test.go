@@ -91,3 +91,23 @@ func TestArchiveNamespaceRejectsInvalidBotID(t *testing.T) {
 		t.Fatalf("expected 400 for invalid bot namespace, got %d", res.Code)
 	}
 }
+
+func TestAPIKeyPathPolicy(t *testing.T) {
+	if !apiKeyPathAllowed("/api/v1/files") || !apiKeyPathAllowed("/api/v1/ai/chat") {
+		t.Fatal("expected archive and AI paths to be allowed")
+	}
+	if apiKeyPathAllowed("/api/v2/bots") || apiKeyPathAllowed("/api/v1/health") {
+		t.Fatal("expected management and public health paths to be denied for scoped keys")
+	}
+}
+
+func TestAPIKeyPermissionMapping(t *testing.T) {
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/files", nil)
+	if got := apiKeyPermissionForRequest(getReq); got != "archive:read" {
+		t.Fatalf("expected archive:read, got %q", got)
+	}
+	postReq := httptest.NewRequest(http.MethodPost, "/api/v1/files", nil)
+	if got := apiKeyPermissionForRequest(postReq); got != "archive:write" {
+		t.Fatalf("expected archive:write, got %q", got)
+	}
+}

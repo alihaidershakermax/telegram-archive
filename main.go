@@ -39,9 +39,13 @@ func main() {
 	}
 	log.Printf("Authorized on account %s", bot.Self.UserName)
 	handlers.SetStorageBot(bot)
+	queueCtx, queueCancel := context.WithCancel(context.Background())
+	handlers.StartStorageQueue(queueCtx, config.Cfg)
+	defer queueCancel()
 
-	// Start the optional Bot Factory. It stays disabled unless a strong
-	// encryption key is configured, so plaintext child-bot tokens are never persisted.
+	// Start the optional Bot Factory.
+	// It stays disabled unless a strong encryption key is configured, so
+	// plaintext child-bot tokens are never persisted.
 	var factoryManager *factory.Manager
 	if config.Cfg.FactoryEncryptionKey != "" {
 		factoryManager, err = factory.NewManager(config.Cfg, handleUpdate)
@@ -69,8 +73,7 @@ func main() {
 		{Command: "mybots", Description: "📊 بوتاتي المُدارة"},
 		{Command: "cancel", Description: "❌ إلغاء العملية"},
 	}
-	_, errCmd := bot.Request(tgbotapi.NewSetMyCommands(botCmds...))
-	if errCmd != nil {
+	if _, errCmd := bot.Request(tgbotapi.NewSetMyCommands(botCmds...)); errCmd != nil {
 		log.Printf("Warning: failed to set bot commands: %v", errCmd)
 	}
 
@@ -101,6 +104,7 @@ func main() {
 		<-signals
 		log.Println("Shutdown signal received; stopping Telegram polling and managed workers...")
 		bot.StopReceivingUpdates()
+		queueCancel()
 		if factoryManager != nil {
 			factoryManager.Close()
 		}
@@ -117,6 +121,12 @@ func main() {
 }
 
 func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
+	if !handlers.AllowBotUpdate(bot) {
+		if update.Message != nil {
+			bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "⏳ تم الوصول إلى حد الطلبات لهذا البوت، يرجى المحاولة بعد قليل."))
+		}
+		return
+	}
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("Panic recovered in handleUpdate: %v", r)
@@ -159,7 +169,6 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 			handlers.HandleMyBotsCommand(bot, msg)
 		case "cancel":
 			handlers.HandleCancelCommand(bot, msg)
-
 		}
 		return
 	}

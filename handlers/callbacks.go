@@ -470,9 +470,10 @@ func downloadFile(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, fileID in
 	sender := storageBot(bot)
 	action := tgbotapi.NewChatAction(query.Message.Chat.ID, "upload_document")
 	sender.Send(action)
-	doc := tgbotapi.NewDocument(query.Message.Chat.ID, tgbotapi.FileID(f.TelegramFileID))
-	doc.Caption = f.Name
-	if _, err := sender.Send(doc); err != nil {
+	queued, err := SendStorageFile(ctx, bot, query.Message.Chat.ID, f.TelegramFileID, f.FileType, f.Name)
+	if queued {
+		bot.Send(tgbotapi.NewMessage(query.Message.Chat.ID, "⏳ تعذر الإرسال فوراً، تمت إضافة الملف إلى طابور الإرسال وسيصل تلقائياً عند عودة الخدمة."))
+	} else if err != nil {
 		// Never retry with the managed bot: Telegram file_id values are bot-scoped.
 		log.Printf("storage gateway file send failed for %d: %v", fileID, err)
 	}

@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -21,7 +22,9 @@ var RankLevels = map[string]int{
 	"owner":       4,
 	"super_admin": 3,
 	"admin":       2,
+	"editor":      1,
 	"moderator":   1,
+	"viewer":      0,
 }
 
 // RankLabels maps rank names to their Arabic display labels.
@@ -30,6 +33,8 @@ var RankLabels = map[string]string{
 	"super_admin": "🥇 أدمن رئيسي",
 	"admin":       "🥈 أدمن",
 	"moderator":   "🥉 مشرف",
+	"editor":      "📝 محرر",
+	"viewer":      "👁️ مشاهد",
 }
 
 // RankPermissions maps each rank to its allowed permissions.
@@ -38,13 +43,13 @@ var RankPermissions = map[string]map[string]bool{
 		"view_stats": true, "manage_content": true, "manage_users": true,
 		"broadcast": true, "manage_admins": true, "manage_settings": true,
 		"view_logs": true, "manage_maintenance": true,
-		"manage_bots": true, "view_bot_metrics": true,
+		"manage_bots": true, "view_bot_metrics": true, "manage_limits": true, "manage_api_keys": true, "manage_backups": true,
 	},
 	"super_admin": {
 		"view_stats": true, "manage_content": true, "manage_users": true,
 		"broadcast": true, "manage_admins": true, "manage_settings": true,
 		"view_logs": true, "manage_maintenance": true,
-		"manage_bots": true, "view_bot_metrics": true,
+		"manage_bots": true, "view_bot_metrics": true, "manage_limits": true, "manage_api_keys": true, "manage_backups": true,
 	},
 	"admin": {
 		"view_stats": true, "manage_content": true, "manage_users": true,
@@ -52,6 +57,12 @@ var RankPermissions = map[string]map[string]bool{
 	},
 	"moderator": {
 		"view_stats": true, "manage_content": true,
+	},
+	"editor": {
+		"view_stats": true, "manage_content": true,
+	},
+	"viewer": {
+		"view_stats": true,
 	},
 }
 
@@ -76,6 +87,10 @@ var ActionLabels = map[string]string{
 	"move_subject":         "↕️ نقل مادة",
 	"move_file":            "↕️ نقل ملف",
 	"set_welcome":          "🎨 تعديل الترحيب",
+	"update_bot_limits":    "📏 تعديل حدود البوت",
+	"rotate_bot_token":     "🔐 تدوير توكن البوت",
+	"create_api_key":       "🔑 إنشاء مفتاح API",
+	"create_backup":        "💾 إنشاء نسخة احتياطية",
 	"register_managed_bot": "🤖 تسجيل بوت مُدار",
 	"pause_managed_bot":    "⏸️ إيقاف بوت مُدار",
 	"resume_managed_bot":   "▶️ تشغيل بوت مُدار",
@@ -239,6 +254,9 @@ func IsOwner(uid int64) bool {
 
 // AddAdmin adds or updates an admin.
 func AddAdmin(ctx context.Context, userID int64, username, firstName, rank string) error {
+	if _, ok := RankLevels[rank]; !ok {
+		return fmt.Errorf("invalid admin rank: %s", rank)
+	}
 	if firstName == "" {
 		firstName = "ID:" + bson.Raw(bson.RawValue{}.String()).String()
 	}
@@ -264,6 +282,9 @@ func SetAdminRank(ctx context.Context, userID int64, rank string, username, firs
 		_, err := db.ColScoped(ctx, "admins").DeleteOne(ctx, bson.M{"id": userID})
 		InvalidateAdmins()
 		return err
+	}
+	if _, ok := RankLevels[rank]; !ok {
+		return fmt.Errorf("invalid admin rank: %s", rank)
 	}
 	doc := bson.M{"rank": rank}
 	if username != "" {

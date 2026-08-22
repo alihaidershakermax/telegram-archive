@@ -124,6 +124,15 @@ var indexSpecs = []indexSpec{
 	{"managed_bots", bson.D{{Key: "status", Value: 1}, {Key: "updated_at", Value: -1}}, false},
 	{"admin_logs", bson.D{{Key: "admin_id", Value: 1}, {Key: "timestamp", Value: -1}}, false},
 	{"admin_logs", bson.D{{Key: "timestamp", Value: -1}}, false},
+	{"storage_jobs", bson.D{{Key: "status", Value: 1}, {Key: "next_attempt_at", Value: 1}}, false},
+	{"storage_jobs", bson.D{{Key: "bot_id", Value: 1}, {Key: "created_at", Value: -1}}, false},
+	{"api_keys", bson.D{{Key: "key_hash", Value: 1}}, true},
+	{"api_keys", bson.D{{Key: "bot_id", Value: 1}, {Key: "created_at", Value: -1}}, false},
+	{"bot_backups", bson.D{{Key: "bot_id", Value: 1}, {Key: "created_at", Value: -1}}, false},
+	{"bot_backup_data", bson.D{{Key: "backup_id", Value: 1}, {Key: "collection", Value: 1}}, false},
+	{"ai_usage", bson.D{{Key: "created_at", Value: -1}}, false},
+	{"ai_usage", bson.D{{Key: "operation", Value: 1}, {Key: "created_at", Value: -1}}, false},
+	{"ai_indexes", bson.D{{Key: "file_id", Value: 1}}, true},
 }
 
 // EnsureIndexes creates all required MongoDB indexes in the primary database.

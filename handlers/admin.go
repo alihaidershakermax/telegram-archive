@@ -188,13 +188,19 @@ func saveAllFiles(bot *tgbotapi.BotAPI, chatID int64, userID int64, state *model
 
 	saved, failed := 0, 0
 	for _, p := range pending {
+		if err := checkFileCapacity(ctx, bot, p.FileSize); err != nil {
+			log.Printf("upload quota rejected: %v", err)
+			failed++
+			continue
+		}
 		msgID := 0
 		channelMsgID, storedFileID, err := sendFileToChannel(bot, p.TelegramFileID, p.FileType, p.Name)
 		if err != nil {
 			log.Printf("Send to channel failed: %v", err)
-		} else {
-			msgID = channelMsgID
+			failed++
+			continue
 		}
+		msgID = channelMsgID
 
 		_, err = services.SaveFile(ctx, p.Name, storedFileID, p.FileType, loc.SubID, msgID, p.FileSize)
 

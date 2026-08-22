@@ -43,3 +43,17 @@ This arrangement provides logical and operational isolation: a worker cannot que
 ## Deployment checklist
 
 On Koyeb, use `Minimum instances = 1`, disable Scale-to-Zero, expose the service `PORT`, and configure `GET /healthz` as the public HTTP health check. Set the startup grace period long enough for MongoDB and Telegram initialization. Keep `BOT_TOKEN`, `MONGO_URI`, `API_KEY`, `AI_API_KEY`, and `FACTORY_ENCRYPTION_KEY` in the secret store. Do not paste production tokens into issues, pull requests, or shell history.
+
+## Production expansion
+
+Each managed bot receives independent limits for users, files, bytes, and requests per minute. New limits can be set with `POST /api/v2/bots/{id}/limits`; usage is exposed through `/usage` and the operator monitor endpoint. The primary bot's shared Telegram channel remains the only storage backend.
+
+File delivery is durable. Immediate delivery uses the primary bot; failures become `storage_jobs` records and are retried with exponential backoff. Jobs that exceed the configured attempts become `dead`, while stale processing jobs are reclaimed after a process restart.
+
+The factory supports `owner`, `admin`, `editor`, and `viewer` roles in each bot database. Management actions are written to audit logs. Maintenance mode is scoped to the bot database, so pausing one archive does not pause another.
+
+Operators can rotate a token only when the replacement belongs to the same Telegram bot identity. The namespace is never changed during rotation. Backups and restores are scoped by both Telegram bot ID and backup ID; factory registration metadata and other bot databases are not included in a restore.
+
+The master API key can create bot-scoped API keys. A scoped key must be paired with the same `X-Telegram-Bot-ID` header and is limited to archive/AI paths with explicit permissions. The raw secret is returned once and is never stored; only a SHA-256 hash is persisted.
+
+AI indexing accepts text for a file that belongs to the selected bot, asks the configured provider for a summary and tags, and stores the resulting `ai_indexes` record inside that bot's database. AI request counts are recorded in the same namespace.

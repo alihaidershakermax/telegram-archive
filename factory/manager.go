@@ -142,18 +142,22 @@ func (m *Manager) Register(ctx context.Context, ownerID int64, token string) (*m
 	namespace, folder := botNamespace(bot.Self.UserName, bot.Self.ID)
 	record := models.ManagedBot{
 
-		ID:               newID(),
-		OwnerID:          ownerID,
-		TokenCiphertext:  ciphertext,
-		TokenNonce:       nonce,
-		TokenHash:        hash,
-		TelegramBotID:    bot.Self.ID,
-		Username:         bot.Self.UserName,
-		FirstName:        bot.Self.FirstName,
-		DatabaseName:     namespace,
-		StorageFolder:    folder,
-		StorageChannelID: m.cfg.ArchiveChannelID,
-		Status:           models.ManagedBotActive,
+		ID:                   newID(),
+		OwnerID:              ownerID,
+		TokenCiphertext:      ciphertext,
+		TokenNonce:           nonce,
+		TokenHash:            hash,
+		TelegramBotID:        bot.Self.ID,
+		Username:             bot.Self.UserName,
+		FirstName:            bot.Self.FirstName,
+		DatabaseName:         namespace,
+		StorageFolder:        folder,
+		StorageChannelID:     m.cfg.ArchiveChannelID,
+		MaxUsers:             m.cfg.FactoryDefaultMaxUsers,
+		MaxFiles:             m.cfg.FactoryDefaultMaxFiles,
+		MaxStorageBytes:      m.cfg.FactoryDefaultMaxBytes,
+		MaxRequestsPerMinute: m.cfg.FactoryDefaultMaxRequests,
+		Status:               models.ManagedBotActive,
 
 		CreatedAt:  now,
 		UpdatedAt:  now,
@@ -223,6 +227,89 @@ func (m *Manager) Get(ctx context.Context, id string, ownerID int64, includeAll 
 	}
 	m.applyLiveMetrics(&row)
 	return &row, nil
+}
+
+// GetByTelegramBotID returns a managed bot by its Telegram identity.
+func (m *Manager) GetByTelegramBotID(ctx context.Context, telegramBotID int64) (*models.ManagedBot, error) {
+	if telegramBotID <= 0 {
+		return nil, ErrNotFound
+	}
+	var row models.ManagedBot
+	if err := db.Col("managed_bots").FindOne(ctx, bson.M{"telegram_bot_id": telegramBotID}).Decode(&row); err != nil {
+		return nil, err
+	}
+	m.applyLiveMetrics(&row)
+	return &row, nil
+}
+
+// UpdateLimits changes only quota metadata; it never changes the bot token or namespace.
+func (m *Manager) UpdateLimits(ctx context.Context, id string, ownerID int64, includeAll bool, maxUsers, maxFiles, maxStorageBytes int64, maxRequestsPerMinute int) (*models.ManagedBot, error) {
+	if maxUsers < 0 || maxFiles < 0 || maxStorageBytes < 0 || maxRequestsPerMinute < 0 {
+		return nil, errors.New("limits cannot be negative")
+	}
+	if _, err := m.Get(ctx, id, ownerID, includeAll); err != nil {
+		return nil, err
+	}
+	_, err := db.Col("managed_bots").UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": bson.M{
+		"max_users": maxUsers, "max_files": maxFiles, "max_storage_bytes": maxStorageBytes, "max_requests_per_minute": maxRequestsPerMinute, "updated_at": time.Now().UTC(),
+	}})
+	if err != nil {
+		return nil, err
+	}
+	return m.Get(ctx, id, ownerID, includeAll)
+}
+
+// RotateToken replaces a bot token while preserving its namespace and metadata.
+// Telegram must return the same bot ID; changing identity requires a new registration.
+func (m *Manager) RotateToken(ctx context.Context, id string, ownerID int64, includeAll bool, newToken string) (*models.ManagedBot, error) {
+	row, err := m.Get(ctx, id, ownerID, includeAll)
+	if err != nil {
+		return nil, err
+	}
+	newToken = strings.TrimSpace(newToken)
+	if err := validateTokenShape(newToken); err != nil {
+		return nil, err
+	}
+	if TokenHash(newToken) == row.TokenHash {
+		return row, nil
+	}
+	if err := db.Col("managed_bots").FindOne(ctx, bson.M{"token_hash": TokenHash(newToken), "_id": bson.M{"$ne": id}}).Err(); err == nil {
+		return nil, errors.New("this bot token is already registered")
+	} else if !errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, err
+	}
+	bot, err := tgbotapi.NewBotAPI(newToken)
+	if err != nil {
+		return nil, fmt.Errorf("telegram token validation failed: %w", err)
+	}
+	if bot.Self.ID != row.TelegramBotID {
+		return nil, errors.New("new token belongs to a different Telegram bot")
+	}
+	ciphertext, nonce, err := m.cipher.Encrypt(newToken)
+	if err != nil {
+		return nil, err
+	}
+	updated := *row
+	updated.TokenCiphertext = ciphertext
+	updated.TokenNonce = nonce
+	updated.TokenHash = TokenHash(newToken)
+	updated.Username = bot.Self.UserName
+	updated.FirstName = bot.Self.FirstName
+	updated.UpdatedAt = time.Now().UTC()
+	m.stopWorker(id)
+	if err := m.startWorker(updated, bot); err != nil {
+		m.markUnhealthy(ctx, id, err)
+		return nil, err
+	}
+	if _, err := db.Col("managed_bots").UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": bson.M{
+		"token_ciphertext": ciphertext, "token_nonce": nonce, "token_hash": updated.TokenHash,
+		"username": updated.Username, "first_name": updated.FirstName, "updated_at": updated.UpdatedAt,
+		"status": models.ManagedBotActive, "last_error": "",
+	}}); err != nil {
+		return nil, err
+	}
+	m.applyLiveMetrics(&updated)
+	return &updated, nil
 }
 
 // Pause stops polling but preserves the encrypted registration.

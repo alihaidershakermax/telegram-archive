@@ -71,6 +71,10 @@ func HandleStart(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 		return
 	}
 
+	if err := checkNewUserCapacity(ctx, bot, user.ID); err != nil {
+		bot.Send(tgbotapi.NewMessage(message.Chat.ID, quotaMessage(err)))
+		return
+	}
 	_ = services.SaveUser(ctx, user.ID, user.UserName, user.FirstName)
 
 	if services.IsBanned(ctx, user.ID) {
@@ -101,23 +105,13 @@ func HandleStart(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 			action = tgbotapi.NewChatAction(message.Chat.ID, "upload_photo")
 		}
 		sender.Send(action)
-		var media tgbotapi.Chattable
-		switch fileType {
-		case "photo":
-			media = tgbotapi.NewPhoto(message.Chat.ID, tgbotapi.FileID(telegramFileID))
-		case "video":
-			media = tgbotapi.NewVideo(message.Chat.ID, tgbotapi.FileID(telegramFileID))
-		case "audio":
-			media = tgbotapi.NewAudio(message.Chat.ID, tgbotapi.FileID(telegramFileID))
-		default:
-			doc := tgbotapi.NewDocument(message.Chat.ID, tgbotapi.FileID(telegramFileID))
-			doc.Caption = "📤 الملف المشارك معك"
-			media = doc
-		}
-		if _, err := sender.Send(media); err != nil {
-
+		queued, err := SendStorageFile(ctx, bot, message.Chat.ID, telegramFileID, fileType, "📤 الملف المشارك معك")
+		if queued {
+			bot.Send(tgbotapi.NewMessage(message.Chat.ID, "⏳ تمت جدولة الملف وسيصل تلقائياً عند عودة خدمة التخزين."))
+		} else if err != nil {
 			log.Printf("shared file send failed: %v", err)
 		}
+
 		return
 	}
 
