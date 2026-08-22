@@ -124,6 +124,34 @@ type GroupConfig struct {
 	UpdatedAt  time.Time `bson:"updated_at" json:"updated_at"`
 }
 
+// SubjectSubscription tracks a user's subscription to a subject inside one bot namespace.
+type SubjectSubscription struct {
+	ID        string    `bson:"_id" json:"id"`
+	BotID     int64     `bson:"bot_id" json:"bot_id"`
+	UserID    int64     `bson:"user_id" json:"user_id"`
+	SubjectID int       `bson:"subject_id" json:"subject_id"`
+	CreatedAt time.Time `bson:"created_at" json:"created_at"`
+}
+
+// VaultItem stores Telegram metadata only; file bytes remain in Telegram storage.
+type VaultItem struct {
+	ID      string    `bson:"_id" json:"id"`
+	BotID   int64     `bson:"bot_id" json:"bot_id"`
+	UserID  int64     `bson:"user_id" json:"user_id"`
+	FileID  int       `bson:"file_id" json:"file_id"`
+	AddedAt time.Time `bson:"added_at" json:"added_at"`
+}
+
+// SubjectNotification prevents duplicate notifications for one user and file.
+type SubjectNotification struct {
+	ID        string    `bson:"_id" json:"id"`
+	BotID     int64     `bson:"bot_id" json:"bot_id"`
+	UserID    int64     `bson:"user_id" json:"user_id"`
+	SubjectID int       `bson:"subject_id" json:"subject_id"`
+	FileID    int       `bson:"file_id" json:"file_id"`
+	SentAt    time.Time `bson:"sent_at" json:"sent_at"`
+}
+
 // StorageCluster represents a separately reachable MongoDB cluster registered by the parent bot.
 type StorageCluster struct {
 	ID             string    `bson:"_id" json:"id"`

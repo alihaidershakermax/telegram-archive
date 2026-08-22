@@ -84,6 +84,10 @@ func main() {
 		{Command: "migratebot", Description: "🔄 نقل قاعدة بوت"},
 		{Command: "migrationstatus", Description: "📈 حالة نقل القواعد"},
 		{Command: "group", Description: "⚙️ إعدادات المجموعة"},
+		{Command: "subscribe", Description: "🔔 الاشتراك في مادة"},
+		{Command: "unsubscribe", Description: "🔕 إلغاء اشتراك مادة"},
+		{Command: "subscriptions", Description: "📚 اشتراكاتي"},
+		{Command: "vault", Description: "🔐 Personal Vault"},
 
 		{Command: "cancel", Description: "❌ إلغاء العملية"},
 	}
@@ -204,6 +208,14 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 			handlers.HandleMigrationStatusCommand(bot, msg)
 		case "group":
 			handlers.HandleGroupCommand(bot, msg)
+		case "subscribe":
+			handlers.HandleSubscribeCommand(bot, msg)
+		case "unsubscribe":
+			handlers.HandleUnsubscribeCommand(bot, msg)
+		case "subscriptions":
+			handlers.HandleSubscriptionsCommand(bot, msg)
+		case "vault":
+			handlers.HandleVaultCommand(bot, msg)
 
 		case "cancel":
 			handlers.HandleCancelCommand(bot, msg)

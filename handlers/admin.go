@@ -202,14 +202,19 @@ func saveAllFiles(bot *tgbotapi.BotAPI, chatID int64, userID int64, state *model
 		}
 		msgID = channelMsgID
 
-		_, err = services.SaveFile(ctx, p.Name, storedFileID, p.FileType, loc.SubID, msgID, p.FileSize)
+		fileID, saveErr := services.SaveFile(ctx, p.Name, storedFileID, p.FileType, loc.SubID, msgID, p.FileSize)
+		err = saveErr
 
 		if err != nil {
 			log.Printf("Upload save failed: %v", err)
 			failed++
 		} else {
 			saved++
+			go func(fID int, name, telegramID, fileType string, subjectID int, size int64) {
+				_ = services.NotifySubjectSubscribers(ctx, bot, bot.Self.ID, models.File{FileID: fID, Name: name, TelegramFileID: telegramID, FileType: fileType, SubjectID: subjectID, FileSize: size})
+			}(fileID, p.Name, storedFileID, p.FileType, loc.SubID, p.FileSize)
 		}
+
 	}
 
 	services.LogAdminAction(ctx, userID, "upload_files", map[string]interface{}{
