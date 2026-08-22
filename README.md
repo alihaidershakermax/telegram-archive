@@ -148,6 +148,8 @@ docker compose logs -f bot
 
 The process listens on the platform-provided `PORT`. Do not hardcode a production port or place secrets in the Dockerfile.
 
+For Telegram long polling, configure the Koyeb Service with **at least one permanent instance** (`Minimum instances = 1`) and disable Scale-to-Zero. A polling bot does not receive regular public HTTP traffic, so an idle policy can stop its process and interrupt updates. Configure the HTTP health check as `GET /healthz` on the exposed `PORT`, with a startup grace period long enough for MongoDB and Telegram initialization. The endpoint is intentionally public, lightweight, and independent of database readiness.
+
 ## Security and reliability
 
 The API uses constant-time API-key comparison and per-key rate limiting. Share tokens use random values and expire. Administration routes apply permission checks before content, user, broadcast, or settings operations.

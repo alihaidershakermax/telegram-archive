@@ -21,6 +21,18 @@ func TestHealthIsPublic(t *testing.T) {
 	}
 }
 
+func TestHealthzAliasIsPublic(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	res := httptest.NewRecorder()
+	testServer().Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", res.Code)
+	}
+	if got := res.Header().Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("expected no-store cache header, got %q", got)
+	}
+}
+
 func TestProtectedRouteRequiresAPIKey(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/categories", nil)
 	res := httptest.NewRecorder()

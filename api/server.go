@@ -58,6 +58,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.health)
 	mux.HandleFunc("/api/v1/health", s.health)
+	mux.HandleFunc("/healthz", s.health)
 	mux.HandleFunc("/api/v1/categories", s.withAuth(s.categories))
 	mux.HandleFunc("/api/v1/subjects", s.withAuth(s.subjects))
 	mux.HandleFunc("/api/v1/files", s.withAuth(s.files))
@@ -72,6 +73,7 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, map[string]interface{}{"status": "ok", "service": "telegram-archive-bot"})
 }
 

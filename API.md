@@ -10,7 +10,10 @@ Send either `X-API-Key: <API_KEY>` or `Authorization: Bearer <API_KEY>`. Protect
 
 ```bash
 curl http://localhost:8000/api/v1/health
+curl http://localhost:8000/healthz
 ```
+
+Use `GET /healthz` as the Koyeb HTTP health-check path. It returns `200 OK` without API-key authentication and does not wait for MongoDB or Telegram, so platform liveness checks remain fast while the bot continues its polling worker.
 
 ## Archive data
 
