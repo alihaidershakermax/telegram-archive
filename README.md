@@ -188,4 +188,4 @@ The bot must be an administrator in the archive channel with permission to post 
 
 ## License
 
-No license has been declared yet. Add an explicit license before distributing the project publicly or accepting external contributions.
+This project is licensed under the **GNU General Public License v3.0 only**. See [`LICENSE`](./LICENSE) for the full license text. The official license reference is available at [GNU GPL v3](https://www.gnu.org/licenses/gpl-3.0.html).
