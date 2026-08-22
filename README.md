@@ -6,12 +6,15 @@ A production-oriented Telegram archive bot for organizing educational documents,
 
 ## Visual identity
 
+![Telegram Archive Bot repository preview](assets/branding/telegram-archive-repository-preview.png)
+
 ![Telegram Archive Bot logo](assets/branding/telegram-archive-logo.png)
 
 The project uses a focused visual system built around deep navy, cyan, and amber. Feature icons and the Instagram announcement artwork are available in the project asset library:
 
 | Asset | Purpose |
 |---|---|
+| [Repository preview](assets/branding/telegram-archive-repository-preview.png) | GitHub repository header and project overview |
 | [Project logo](assets/branding/telegram-archive-logo.png) | Main repository and bot identity |
 | [Advanced Search icon](assets/branding/telegram-archive-search-icon.png) | Search feature and documentation callouts |
 | [Secure API + AI icon](assets/branding/telegram-archive-api-icon.png) | API and AI gateway materials |
