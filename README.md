@@ -1,427 +1,191 @@
-# 🤖 Telegram Archive Bot — Python
+# Telegram Archive Bot
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue)](https://python.org)
-[![Telegram Bot](https://img.shields.io/badge/Telegram-Bot-blue)](https://t.me/arcivealibot)
-[![Supabase](https://img.shields.io/badge/Supabase-DB-003974)](https://supabase.com)
+A production-oriented Telegram archive bot for organizing educational documents, media, and shared resources in MongoDB and Telegram. The bot provides structured categories and subjects, administrator workflows, media-aware downloads, secure share links, broadcast tools, an authenticated HTTP API, and an OpenAI-compatible AI gateway.
 
-**منصة أرشفة تعليمية ذكية على Telegram** — تنظم ملفاتك، تشاركها بروابط مباشرة، وتدير المحتوى بسهولة.
+> The bot preserves Telegram as the delivery layer while MongoDB stores metadata, permissions, counters, and operational state.
 
-> ⚡ **Version:** 1.0.0 (Monolithic) | **Author:** [Ali al-Akbar Haidar](https://alialakbarhaidarshaker.vercel.app) | **Bot:** [@arcivealibot](https://t.me/arcivealibot)
+## Capabilities
 
-<p align="center">
-  <img src="social-preview.svg" alt="Telegram Archive Bot" width="800"/>
-</p>
+| Area | Capability |
+|---|---|
+| Archive | Categories, subjects, ordered files, metadata, download counters |
+| Delivery | Photos are sent as Telegram photos; documents, video, audio, voice, animations, and other media retain suitable delivery types |
+| Administration | Role-based permissions, content management, user moderation, maintenance mode, welcome settings, audit logs |
+| Sharing | Expiring deep links backed by cryptographically random tokens |
+| API | API-key authentication, rate limiting, archive reads, bundle delivery, and AI routes |
+| AI | OpenAI-compatible chat and summarization gateway plus `/ai` and `/summarize` bot commands |
+| Search | Advanced metadata search with filters, sorting, pagination, and Telegram/API access |
+| Operations | Health endpoint, Docker image, Compose configuration, request IDs, race-detector coverage |
 
----
+## Architecture
 
-## ✨ **الميزات**
+The application is a Go service with clear boundaries between Telegram handlers, archive services, persistence, API routes, keyboards, models, and utility functions.
 
-| الميزة | الوصف |
-|--------|-------|
-| 📁 **أرشفة ذكية** | أقسام ومواد منظمة (محاضرات PDF، ملخصات، فيديوهات، اختبارات، كتب، الأخرى) |
-| 🔗 **مشاركة فورية** | روابط `t.me/arcivealibot?start=file_<id>` تفتح الملف مباشرة بدون قوائم |
-| ⭐ **تقييمات ومفضلة** | تقييم 1–5 نجوم، إضافة للمفضلة |
-| 📢 **اشتراكات** | إشعارات عند إضافة ملف جديد لمادة مشترك فيها |
-| ⚙️ **لوحة إدارة** | إدارة كاملة (مشرفين، حظر users، إحصائيات، إذاعة) |
-| 🔍 **بحث سريع** | بحث نصي في أسماء الملفات |
-| 📊 **إحصائيات** | عدد الملفات، المستخدمين، المشتركين، التقييمات |
-| 🛡️ **أمان** | حظر مستخدمين، وضع صيانة، صلاحيات أدمن |
-| 🤖 **مساعد ذكي** | تكامل مع Groq/OpenAI للإجابة على الأسئلة (اختياري) |
-| 📡 **قنوات** | ربط قناة أرشيف تلقائي — عند رفع ملف في مجموعة، يصل إشعار للأدمن لحفظه |
+![Telegram Archive Bot architecture](./docs/architecture.png)
 
----
+The complete explanation is available in [`docs/architecture.md`](./docs/architecture.md), with an editable source in [`docs/architecture.mmd`](./docs/architecture.mmd).
 
-## 🚀 **التشغيل السريع**
+```text
+Telegram Updates
+      |
+      v
+  handlers  -----> services -----> MongoDB
+      |                 |
+      |                 +--------> Telegram Bot API
+      |
+      +---- /search --> advanced archive search
 
-### **المتطلبات**
-- Python 3.11+
-- حساب [Supabase](https://supabase.com) (مجاني)
-- بوت Telegram من [@BotFather](https://t.me/BotFather)
+HTTP clients ---> authenticated API ---> archive / bundle / AI services
+```
 
-### **1. التثبيت**
+The bot and API run in the same process. The HTTP server listens on `PORT` and exposes a public health endpoint together with authenticated API routes.
+
+## Requirements
+
+You need Go 1.23 or newer, MongoDB, a Telegram bot token, and an archive channel where the bot can post files. Docker is the recommended deployment path.
+
+## Configuration
+
+Copy `.env.example` to `.env` for local development. Never commit `.env` or real credentials.
+
+| Variable | Required | Description |
+|---|---:|---|
+| `BOT_TOKEN` | Yes | Telegram BotFather token |
+| `OWNER_ID` | Yes | Numeric Telegram ID of the owner |
+| `ARCHIVE_CHANNEL_ID` | Yes | Channel ID used for archived media |
+| `MONGO_URI` | Yes | MongoDB connection string |
+| `DB_NAME` | No | Database name; defaults to `telegram_archive_db` |
+| `PORT` | No | HTTP port; defaults to `8000` |
+| `API_KEY` | Recommended | Secret for protected HTTP API routes |
+| `API_RATE_LIMIT` | No | Requests per API key per minute; defaults to `60` |
+| `AI_BASE_URL` | No | OpenAI-compatible API base URL |
+| `AI_API_KEY` | No | AI provider key; server-side only |
+| `AI_MODEL` | No | AI model name; defaults to `gpt-5-mini` |
+| `AI_REQUEST_TIMEOUT_SECONDS` | No | AI request timeout |
+| `BROADCAST_DELAY` | No | Delay between broadcast messages |
+| `CACHE_TTL_SECONDS` | No | Archive cache lifetime |
+
+## Local development
 
 ```bash
-# Clone repository
 git clone https://github.com/alihaidershakermax/telegram-archive-bot-py.git
 cd telegram-archive-bot-py
-
-# Install dependencies
-pip install -r requirements.txt
-```
-
-### **2. إعداد البيئة**
-
-```bash
 cp .env.example .env
-nano .env  # أو أي محرر
+# edit .env with real values
+go mod download
+go run .
 ```
 
-**.env**:
-```env
-# Telegram Bot
-BOT_TOKEN=123456:ABC-DEF...
-OWNER_ID=2018954602
-ARCHIVE_CHANNEL_ID=-1001234567890
+The health endpoint is available at `GET /api/v1/health`. A successful response looks like:
 
-# Supabase
-SUPABASE_URL=https://xxxx.supabase.co
-SUPABASE_ANON_KEY=eyJ...
-
-# Optional: AI (Groq/OpenAI)
-GROQ_API_KEY=gsk_...
-AI_PROVIDER=groq
-
-# Optional
-WELCOME_PHOTO=https://example.com/welcome.jpg
-CACHE_TTL_SECONDS=60
+```json
+{"status":"ok","service":"telegram-archive-bot"}
 ```
 
-### **3. إعداد قاعدة البيانات (Supabase)**
+## Bot commands
 
-افتح **Supabase Dashboard** → **SQL Editor** → الصق محتوى كل ملفات `migrations/` بالترتيب:
+| Command | Description |
+|---|---|
+| `/start` | Open the archive menu |
+| `/panel` | Open the administrator panel when authorized |
+| `/broadcast` | Send a broadcast when the `broadcast` permission is granted |
+| `/ban <id>` | Ban a user when authorized |
+| `/unban <id>` | Remove a user ban when authorized |
+| `/ai <question>` | Ask the configured AI gateway |
+| `/summarize <text>` | Summarize text through the configured AI gateway |
+| `/search` | Search the archive with advanced filters |
 
-```sql
--- 001_groups_channel_support.sql
--- 002_trigger_words.sql
--- 003_radar_conversation_logs.sql
--- 004_multi_supabase_perf.sql (اختياري)
--- 005_channel_integration_reminders.sql (إن كنت تستخدم التذكيرات)
--- 006_exam_codes.sql (إن كنت تستخدم كودي)
--- 007_shared_files.sql (مشاركة الملفات)
+### Advanced search
+
+Use `/search` and send a phrase with optional filters. Search terms are matched against file names, file types, and subject names. Results are paginated and can be sorted by newest, oldest, download count, or name.
+
+```text
+/search
+تشريح النوع:pdf الترتيب:الأكثر_تنزيلاً
 ```
 
-**أيضاً يمكنك استخدام `setup_db.py` للأتمتة:**
-```bash
-python setup_db.py
+The API exposes the same capability through `GET /api/v1/search`. Supported query parameters include `q`, `category_id`, `subject_id`, `file_type`, `from`, `to`, `sort`, `page`, and `limit`.
+
+## HTTP API
+
+Protected routes require either `X-API-Key: <API_KEY>` or `Authorization: Bearer <API_KEY>`.
+
+```text
+GET  /api/v1/health
+GET  /api/v1/categories
+GET  /api/v1/subjects?category_id=1
+GET  /api/v1/files?subject_id=1
+GET  /api/v1/search?q=تشريح&file_type=pdf&sort=downloads&page=0&limit=10
+POST /api/v1/bundle
+POST /api/v1/ai/chat
+POST /api/v1/ai/summarize
 ```
 
-### **4. تشغيل البوت**
+The bundle route accepts `{"file_ids":[1,2]}` and requires `X-Telegram-User-ID`. It enforces a maximum of 20 files and a 100 MB generated bundle limit, then sends the ZIP to that Telegram user.
 
-```bash
-python bot.py
-```
-
-**للإنتاج (production) مع `screen` أو `systemd`:**
-```bash
-# Using screen
-screen -S archive-bot
-python bot.py
-# Ctrl+A, D to detach
-
-# Using systemd (create /etc/systemd/system/archive-bot.service)
-[Unit]
-Description=Telegram Archive Bot
-After=network.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/path/to/telegram-archive-bot-py
-ExecStart=/usr/bin/python3 /path/to/telegram-archive-bot-py/bot.py
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-```
-
----
-
-## 📖 **الاستخدام**
-
-### **المستخدم العادي**
-
-| الأمر / زر | الوصف |
-|------------|-------|
-| `/start` | بدء البوت، استقبال الترحيب |
-| `/archive` أو `📁 الملفات` | عرض الأرشيف (الأقسام → المواد → الملفات) |
-| `/help` | عرض قائمة الأوامر |
-| `/search <كلمة>` | بحث عن ملف |
-| `/favorites` | عرض الملفات المفضلة |
-| `/mystats` | إحصائياتك الشخصية |
-
-**عرض ملف:**
-1. `/archive` → اختر قسم
-2. اختر مادة
-3. اختر ملف → **يظهر الملف** مع أزرار:
-   - ⭐ إضافة/إزالة من المفضلة
-   - ⭐ 1–5 للتقييم
-   - **🔗 مشاركة** ← ينشئ رابط مباشر
-   - 🔙 رجوع
-
-**مشاركة ملف:**
-- اضغط **🔗 مشاركة** أسفل الملف
-- انسخ الرابط المرسل:
-  ```
-  https://t.me/arcivealibot?start=file_123
-  ```
-- أرسله لأي شخص ← عند الضغط: يفتح البوت ويظهر الملف فوراً
-
-### **المشرف (Admin)**
-
-| الأمر | الوصف |
-|-------|-------|
-| `/panel` | لوحة الإدارة الكاملة |
-| `/ban <user_id>` | حظر مستخدم |
-| `/unban <user_id>` | إلغاء حظر |
-| `/stats` | إحصائيات عامة |
-| `/broadcast` | إرسال رسالة جماعية لجميع المستخدمين |
-| `📢 إرسال إذاعة` | من لوحة المفاتيح |
-
----
-
-## 🏗️ **الهيكل (Structure)**
-
-```
-telegram-archive-bot-py/
-├── bot.py                     # Main bot entry (monolithic, ~230 KB)
-├── ai_service.py              # AI integration (Groq/OpenAI)
-├── supabase_client.py         # Supabase client wrapper
-├── sync_service.py            # Convex sync (optional)
-├── config.py                  # Constants & command texts
-├── keyboards.py               # Reply & inline keyboards
-├── handlers/
-│   ├── __init__.py            # Exports
-│   ├── commands.py            # /start, /help, /archive, /ask, /ai...
-│   ├── messages.py            # Text message handlers
-│   ├── callbacks.py           # Inline button logic
-│   └── groups.py              # Channel posts, group handling
-├── services/
-│   ├── archive.py             # Archive CRUD, categories, subjects, files
-│   ├── broadcast.py           # Broadcast worker
-│   ├── cache.py               # Caching utilities
-│   ├── exam_codes.py          # كودي - exam code vault (encrypted)
-│   ├── radar.py               # Activity radar
-│   ├── reminders.py           # Study reminder scheduler
-│   └── users.py               # User management
-├── migrations/
-│   ├── 001_groups_channel_support.sql
-│   ├── 002_trigger_words.sql
-│   ├── 003_radar_conversation_logs.sql
-│   ├── 004_multi_supabase_perf.sql
-│   ├── 005_channel_integration_reminders.sql
-│   ├── 006_exam_codes.sql
-│   └── 007_shared_files.sql
-├── templates/
-│   ├── login.html
-│   ├── dashboard.html
-│   ├── settings.html
-│   └── links.html
-├── .env.example
-├── requirements.txt
-├── Procfile
-├── runtime.txt
-├── README.md
-└── .gitignore
-```
-
----
-
-## 🔗 **نظام المشاركة (File Sharing)**
-
-### **كيف يعمل؟**
-
-1. **المستخدم يضغط ملفاً** → يظهر زر **🔗 مشاركة**
-2. **الضغط على الزر** → البوت ينشئ رابط:
-   ```
-   https://t.me/arcivealibot?start=file_123
-   ```
-   (يخزن في `shared_files` table مع انتهاء الصلاحية 30 يوم)
-3. **إرسال الرابط** لأي شخص
-4. **الضغط على الرابط**:
-   - يفتح المحادثة مع البوت
-   - يُرسل الملف مباشرة (بدون قوائم)
-   - يُسجل "مشاهدة" تلقائياً
-   - الملف يظهر بجودة كاملة
-
-### **الصلاحية**
-- **مدة الرابط:** 30 يوم (قابل للتعديل في `create_share_link`)
-- **المرفق:** الملف المخزن في قناة الأرشيف (يُشار إليه عبر `file_id`)
-
----
-
-## 🗄️ **قاعدة البيانات (Supabase)**
-
-### **الجداول الأساسية**
-
-| الجدول | الوصف |
-|--------|-------|
-| `users` | المستخدمين (id, username, first_name, is_banned, last_seen_at) |
-| `categories` | الأقسام (id, name, order) — 8 أقسام ثابتة |
-| `subjects` | المواد (id, name, category_id) |
-| `files` | الملفات (id, name, file_id, file_type, subject_id, message_id, file_size) |
-| `shared_files` | روابط المشاركة (share_hash, telegram_file_id, expires_at, created_by) |
-| `favorites` | المفضلة (user_id, file_id) |
-| `file_ratings` | تقييمات الملفات (user_id, file_id, stars) |
-| `subject_subscriptions` | اشتراكات المواد (user_id, subject_id) |
-| `user_activity` | سجل نشاط المستخدمين |
-| `conversation_logs` | سجل المحادثات (للتحليل) |
-| `broadcasts` | طلبات الإذاعة (status: pending/sending/done) |
-| `bot_settings` | إعدادات البوت (maintenance_mode, إلخ) |
-| `file_requests` | طلبات الملفات من المستخدمين |
-| `exam_codes` | خزانة أكواد الامتحانات (كودي) — مشفرة |
-
----
-
-## ⚙️ **الأوامر (Commands)**
-
-| الأمر | الصلاحية | الوصف |
-|--------|-----------|--------|
-| `/start` | الجميع | بدء البوت |
-| `/archive` | الجميع | عرض الأرشيف |
-| `/panel` | المشرفون فقط | لوحة الإدارة |
-| `/stats` | الجميع | إحصائيات عامة |
-| `/mystats` | الجميع | إحصائياتك الشخصية |
-| `/favorites` | الجميع | الملفات المفضلة |
-| `/unread` | الجميع | الملفات غير المقروءة |
-| `/mysubs` | الجميع | اشتراكاتك في المواد |
-| `/ask` | الجميع | طرح سؤال للإدارة |
-| `/ai` | الجميع | مساعد الذكاء الاصطناعي |
-| `/search <كلمة>` | الجميع | بحث عن ملف |
-| `/help` | الجميع | قائمة الأوامر |
-| `/ban <id>` | المشرفون فقط | حظر مستخدم |
-| `/unban <id>` | المشرفون فقط | إلغاء حظر |
-| `/broadcast` | المشرفون فقط | إرسال إذاعة |
-| `/kodi` | الطلاب | إدارة أكواد الامتحان (كودي) |
-| `/remind` | الطلاب | تذكيرات دراسة |
-
----
-
-## 🛠️ **التطوير**
-
-### **إضافة أمر جديد**
-
-في `handlers/commands.py`:
-```python
-async def my_new_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("مرحباً!")
-```
-
-في `bot.py`:
-```python
-application.add_handler(CommandHandler("mycmd", my_new_command))
-```
-
-### **إضافة زر في الكيبورد**
-
-في `keyboards.py`:
-```python
-def get_main_keyboard(user_id=None):
-    return ReplyKeyboardMarkup([
-        ['📁 الملفات', '🆕 أمر جديد'],
-        ...
-    ], resize_keyboard=True)
-```
-
----
-
-## 🐛 **استكشاف الأخطاء**
-
-### **`TemplateNotFound: login.html` (Dashboard)**
-السبب: قوالب Flask غير موجودة.  
-الحل: Dashboard معطلة افتراضياً في هذه النسخة — لا تؤثر على عمل البوت.
-
-### **`shared_files table does not exist`**
-الحل: شغّل migration 007 في Supabase.
-
-### **`BOT_TOKEN not set`**
-الحل: تأكد من ضبط `.env` بشكل صحيح.
-
-### **`ModuleNotFoundError: No module named 'cryptography'`**
-الحل: `pip install cryptography` (مطلوب لكودي).
-
----
-
-## 📦 **Production Deploy**
-
-### **Using PM2 (recommended)**
+Example:
 
 ```bash
-pip install pm2 -g
-pm2 start bot.py --name archive-bot
-pm2 save
-pm2 startup  # for auto-start on reboot
+curl -H "X-API-Key: $API_KEY" \
+  "http://localhost:8000/api/v1/categories"
+
+curl -X POST \
+  -H "X-API-Key: $API_KEY" \
+  -H "X-Telegram-User-ID: 123456789" \
+  -H "Content-Type: application/json" \
+  -d '{"file_ids":[12,13]}' \
+  "http://localhost:8000/api/v1/bundle"
 ```
 
-### **Using Docker**
+## Docker and Koyeb
 
-```dockerfile
-# Dockerfile
-FROM python:3.11-slim
-
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-
-CMD ["python", "bot.py"]
-```
+The included multi-stage Dockerfile builds a static Go binary in a minimal runtime image. Set all environment variables as Koyeb Secrets or environment variables, especially `BOT_TOKEN`, `MONGO_URI`, `API_KEY`, and `AI_API_KEY`.
 
 ```bash
-docker build -t telegram-archive-bot .
-docker run -d --name archive-bot --restart unless-stopped \
-  -v ./.env:/app/.env \
-  telegram-archive-bot
+docker compose up --build -d
+docker compose logs -f bot
 ```
 
-### **Using Heroku**
+The process listens on the platform-provided `PORT`. Do not hardcode a production port or place secrets in the Dockerfile.
+
+## Security and reliability
+
+The API uses constant-time API-key comparison and per-key rate limiting. Share tokens use random values and expire. Search uses escaped regular expressions, bounded pagination, validated filters, and server-side sorting. Administration routes apply permission checks before content, user, broadcast, or settings operations.
+
+Telegram and MongoDB errors should be logged server-side with context while user-facing messages remain generic. The repository includes race-detector and static-analysis checks for the main packages.
+
+## Testing
+
+Run the complete Go verification suite before submitting changes:
 
 ```bash
-heroku create telegram-archive-bot-py
-heroku addons:create heroku-postgresql:hobby-dev  # for Supabase, or connect external
-git push heroku main
-heroku ps:scale worker=1
+gofmt -w .
+go test ./...
+go test -race ./...
+go vet ./...
+git diff --check
 ```
 
----
+API tests cover health, authentication, bundle validation, delivery failure handling, ZIP creation, and Telegram-download status handling. Utility tests cover image detection and file classification.
 
-## 📊 **الإحصائيات (Stats)**
+## Project layout
 
+```text
+api/       Authenticated HTTP API and bundle delivery
+ai/        OpenAI-compatible gateway
+config/    Environment configuration
+db/        MongoDB connection, indexes, and counters
+handlers/  Telegram commands, callbacks, uploads, AI, and advanced search
+keyboards/ Inline Telegram keyboards
+models/    MongoDB and in-memory state models
+services/  Archive, users, admins, sharing, broadcast, rating, and search
+utils/     File classification and Telegram message helpers
 ```
-👥 المستخدمون:      1,234
-📚 المواد:          56
-📄 الملفات:         8,901
-⭐ التقييمات:       4.7/5
-🔗 الروابط المشاركة:  342
-```
 
----
+## Operational notes
 
-## 🤝 **المساهمة**
+The bot must be an administrator in the archive channel with permission to post media. MongoDB should use indexes for file name, type, subject, upload date, and download count as the archive grows. Search pagination remains bounded to protect the bot and API under load.
 
-Contributions are welcome! Please:
+## License
 
-1. Fork repo
-2. Create feature branch (`git checkout -b feat/amazing-feature`)
-3. Commit (`git commit -m 'feat: add amazing feature'`)
-4. Push (`git push origin feat/amazing-feature`)
-5. Open Pull Request
-
----
-
-## 📄 **License**
-
-MIT — see [LICENSE](LICENSE) for details.
-
----
-
-## 👤 **المطور**
-
-**Ali al-Akbar Haidar**  
-🔗 [Portfolio](https://alialakbarhaidarshaker.vercel.app)  
-📧 [dextermorgenk@users.noreply.github.com](mailto:dextermorgenk@users.noreply.github.com)  
-📱 [@dextermorgenk](https://t.me/dextermorgenk) (Telegram)  
-🤖 [@arcivealibot](https://t.me/arcivealibot) (Bot)
-
----
-
-## 🔗 **الروابط**
-
-- **Repo (Python):** https://github.com/alihaidershakermax/telegram-archive-bot-py
-- **Repo (Node.js):** https://github.com/alihaidershakermax/telegram-archive-bot-node
-- **Bot:** https://t.me/arcivealibot
-- **Portfolio:** https://alialakbarhaidarshaker.vercel.app
-
----
-
-> **Note:** This is the **Python (monolithic)** version. For a modular Node.js version, see [telegram-archive-bot-node](https://github.com/alihaidershakermax/telegram-archive-bot-node).
+No license has been declared yet. Add an explicit license before distributing the project publicly or accepting external contributions.

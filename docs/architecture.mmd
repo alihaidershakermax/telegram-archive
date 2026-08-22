@@ -1,0 +1,47 @@
+flowchart TB
+    U[Telegram Users] --> TG[Telegram Bot API]
+    A[Admins] --> TG
+    C[External Clients] -->|API Key + Rate Limit| HTTP[HTTP API :PORT]
+
+    TG --> UPD[Update Polling]
+    UPD --> ROUTER[Command / Callback Router]
+    ROUTER --> H[Handlers]
+    H --> AUTHZ[Permission & Moderation Checks]
+    AUTHZ --> ARCH[Archive Handlers]
+    AUTHZ --> ADM[Admin Handlers]
+    AUTHZ --> AIH[AI Handlers]
+
+    HTTP --> APIAUTH[API Authentication]
+    APIAUTH --> APIR[Archive API]
+    APIAUTH --> BUNDLE[Bundle API]
+    APIAUTH --> AIGW[AI Gateway API]
+
+    ARCH --> AS[Archive Service]
+    ADM --> ADS[Admin & User Services]
+    AIH --> AIGW
+    APIR --> AS
+    BUNDLE --> AS
+    BUNDLE --> ZIP[ZIP Builder]
+    AIGW --> LLM[OpenAI-Compatible Provider]
+
+    AS --> DB[(MongoDB)]
+    ADS --> DB
+    APIR --> DB
+    BUNDLE --> DB
+    DB --> IDX[Indexes & Atomic Counters]
+
+    AS --> TGA[Telegram File / Message API]
+    BUNDLE --> TGA
+    TGA --> TMP[/Bounded Temporary Files/]
+
+    classDef external fill:#dbeafe,stroke:#2563eb,color:#0f172a
+    classDef app fill:#e0e7ff,stroke:#4f46e5,color:#111827
+    classDef service fill:#dcfce7,stroke:#16a34a,color:#14532d
+    classDef data fill:#fef3c7,stroke:#d97706,color:#78350f
+    classDef risk fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
+
+    class U,A,C,TG,LLM external
+    class UPD,ROUTER,H,AUTHZ,HTTP,APIAUTH,APIR,BUNDLE,AIGW,ARCH,ADM,AIH app
+    class AS,ADS,AIGW,ZIP service
+    class DB,IDX,TGA data
+    class TMP risk
