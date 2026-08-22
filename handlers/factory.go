@@ -83,6 +83,8 @@ func HandleFactoryText(bot *tgbotapi.BotAPI, message *tgbotapi.Message) bool {
 		return true
 	}
 	row, err := botFactory.Register(context.Background(), userID, strings.TrimSpace(message.Text))
+	// Best-effort deletion keeps the token out of the visible chat history.
+	_, _ = bot.Request(tgbotapi.NewDeleteMessage(message.Chat.ID, message.MessageID))
 	if err != nil {
 		log.Printf("managed bot registration failed for %d: %v", userID, err)
 		bot.Send(tgbotapi.NewMessage(message.Chat.ID, "❌ تعذر تسجيل التوكن. تأكد أنه صحيح وغير مستخدم مسبقاً ثم أعد المحاولة."))

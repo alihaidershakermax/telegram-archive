@@ -5,6 +5,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -81,17 +83,32 @@ func main() {
 	if port == "" {
 		port = "8000"
 	}
+	apiServer := api.NewServer(config.Cfg, bot)
+	apiServer.SetFactory(factoryManager)
+	httpServer := &http.Server{Addr: ":" + port, Handler: apiServer.Handler()}
 	go func() {
-		apiServer := api.NewServer(config.Cfg, bot)
-		apiServer.SetFactory(factoryManager)
 		log.Printf("API and health server listening on port %s", port)
-
-		if err := http.ListenAndServe(":"+port, apiServer.Handler()); err != nil {
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Printf("API server stopped: %v", err)
 		}
 	}()
 
 	log.Println("Bot is running...")
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-signals
+		log.Println("Shutdown signal received; stopping Telegram polling and managed workers...")
+		bot.StopReceivingUpdates()
+		if factoryManager != nil {
+			factoryManager.Close()
+		}
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := httpServer.Shutdown(shutdownCtx); err != nil {
+			log.Printf("HTTP server shutdown warning: %v", err)
+		}
+	}()
 
 	for update := range updates {
 		go handleUpdate(bot, update)
