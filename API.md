@@ -102,6 +102,7 @@ Before enabling the factory, set `FACTORY_ENCRYPTION_KEY` to a random 32-byte va
 | `GET` | `/api/v2/router/best` | Selects the healthiest available bot using live routing signals |
 | `POST` | `/api/v2/bots/{id}/limits` | Updates per-bot user, file, storage, and requests-per-minute limits |
 | `GET` | `/api/v2/bots/{id}/usage` | Returns usage from the bot's isolated database and its storage queue counters |
+| `GET` | `/api/v2/bots/{id}/expansion` | Returns the parent controller's automatic expansion state |
 | `POST` | `/api/v2/bots/{id}/rotate-token` | Replaces a token while requiring the same Telegram bot ID |
 | `GET` | `/api/v2/bots/{id}/backups` | Lists snapshots for one bot database |
 | `POST` | `/api/v2/bots/{id}/backup` | Creates a snapshot of one bot database |
@@ -134,6 +135,18 @@ The intelligent routing score uses health recency, observed latency, active requ
 The primary bot remains the only Storage Gateway. A failed delivery is persisted in `storage_jobs` and retried with exponential backoff. After `STORAGE_MAX_ATTEMPTS`, the job receives `dead` status for operator review. Stale `processing` jobs are reclaimed after two minutes, which protects delivery after a process crash.
 
 Default limits for newly registered bots are configured with `FACTORY_DEFAULT_MAX_USERS`, `FACTORY_DEFAULT_MAX_FILES`, `FACTORY_DEFAULT_MAX_STORAGE_BYTES`, and `FACTORY_DEFAULT_MAX_REQUESTS_PER_MINUTE`. A value of zero means unlimited for that limit. Queue behavior is configured with `STORAGE_QUEUE_POLL_SECONDS`, `STORAGE_MAX_ATTEMPTS`, `STORAGE_RETRY_BASE_SECONDS`, and `STORAGE_QUEUE_BATCH_SIZE`.
+
+The parent bot starts the database expansion controller when `DB_AUTO_EXPANSION=true`. It scans active child bots, acquires a MongoDB lease per bot, ensures that bot indexes exist, records users/files/storage usage, and changes the capacity tier when thresholds are reached. The controller never renames or drops live collections and is safe to rerun after a crash. Check one bot with `GET /api/v2/bots/{id}/expansion`.
+
+```env
+DB_AUTO_EXPANSION=true
+DB_EXPANSION_POLL_SECONDS=60
+DB_EXPANSION_BATCH_SIZE=500
+DB_EXPANSION_MAX_DOCS=100000
+DB_EXPANSION_MAX_BYTES=10737418240
+DB_EXPANSION_LOCK_SECONDS=300
+DB_EXPANSION_COOLDOWN_SECONDS=300
+```
 
 ```bash
 curl -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \\

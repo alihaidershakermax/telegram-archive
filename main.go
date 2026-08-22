@@ -47,6 +47,7 @@ func main() {
 	// It stays disabled unless a strong encryption key is configured, so
 	// plaintext child-bot tokens are never persisted.
 	var factoryManager *factory.Manager
+	var expansionController *factory.AutoExpansionController
 	if config.Cfg.FactoryEncryptionKey != "" {
 		factoryManager, err = factory.NewManager(config.Cfg, handleUpdate)
 		if err != nil {
@@ -57,6 +58,9 @@ func main() {
 				log.Printf("Bot Factory restore warning: %v", err)
 			}
 			defer factoryManager.Close()
+			expansionController = factory.StartAutoExpansion(context.Background(), config.Cfg)
+			defer expansionController.Stop()
+
 		}
 	}
 
@@ -89,6 +93,7 @@ func main() {
 	}
 	apiServer := api.NewServer(config.Cfg, bot)
 	apiServer.SetFactory(factoryManager)
+	apiServer.SetExpansion(expansionController)
 	httpServer := &http.Server{Addr: ":" + port, Handler: apiServer.Handler()}
 	go func() {
 		log.Printf("API and health server listening on port %s", port)
@@ -105,9 +110,13 @@ func main() {
 		log.Println("Shutdown signal received; stopping Telegram polling and managed workers...")
 		bot.StopReceivingUpdates()
 		queueCancel()
+		if expansionController != nil {
+			expansionController.Stop()
+		}
 		if factoryManager != nil {
 			factoryManager.Close()
 		}
+
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := httpServer.Shutdown(shutdownCtx); err != nil {

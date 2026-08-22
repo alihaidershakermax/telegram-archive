@@ -133,6 +133,7 @@ var indexSpecs = []indexSpec{
 	{"ai_usage", bson.D{{Key: "created_at", Value: -1}}, false},
 	{"ai_usage", bson.D{{Key: "operation", Value: 1}, {Key: "created_at", Value: -1}}, false},
 	{"ai_indexes", bson.D{{Key: "file_id", Value: 1}}, true},
+	{"expansion_states", bson.D{{Key: "status", Value: 1}, {Key: "next_eligible_at", Value: 1}}, false},
 }
 
 // EnsureIndexes creates all required MongoDB indexes in the primary database.

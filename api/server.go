@@ -38,6 +38,7 @@ type Server struct {
 	bundleBuilder func(context.Context, *tgbotapi.BotAPI, []int) ([]byte, error)
 	bundleSender  func(int64, []byte) error
 	factory       *factory.Manager
+	expansion     *factory.AutoExpansionController
 }
 
 type bucket struct {
@@ -62,6 +63,9 @@ func NewServer(cfg *config.Config, bot *tgbotapi.BotAPI) *Server {
 
 // SetFactory attaches the managed-bot lifecycle service to API v2.
 func (s *Server) SetFactory(manager *factory.Manager) { s.factory = manager }
+
+// SetExpansion attaches the parent bot's automatic database expansion controller.
+func (s *Server) SetExpansion(controller *factory.AutoExpansionController) { s.expansion = controller }
 
 // archiveContextFromRequest selects the primary database by default. A trusted
 // API caller may opt into a managed bot namespace with X-Telegram-Bot-ID, but

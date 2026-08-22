@@ -57,3 +57,13 @@ Operators can rotate a token only when the replacement belongs to the same Teleg
 The master API key can create bot-scoped API keys. A scoped key must be paired with the same `X-Telegram-Bot-ID` header and is limited to archive/AI paths with explicit permissions. The raw secret is returned once and is never stored; only a SHA-256 hash is persisted.
 
 AI indexing accepts text for a file that belongs to the selected bot, asks the configured provider for a summary and tags, and stores the resulting `ai_indexes` record inside that bot's database. AI request counts are recorded in the same namespace.
+
+## Parent-controlled database auto-scaling
+
+The parent bot starts an `AutoExpansionController` when `DB_AUTO_EXPANSION=true`. The controller scans active child bots, derives each bot database from its Telegram bot ID, and records the latest counts for users, files, and file bytes in the primary `expansion_states` collection. It does not share archive records between databases.
+
+Each scan uses a MongoDB lease keyed by the child bot ID. A second parent process cannot expand the same child database while the lease is active, and the cooldown prevents continuous rescans after a successful pass. If a process crashes, the lease expires and a later scan can safely resume.
+
+Schema preparation is additive and idempotent. The controller ensures indexes in the child database and records `001_base_indexes` in `schema_migrations`; it never drops, renames, or rewrites live collections. Capacity is reported as `standard` or `expanded` according to the configured document and byte thresholds. Actual disk-tier growth remains the responsibility of the MongoDB provider or Atlas autoscaling policy; the parent controller handles per-bot provisioning, indexes, migrations, and capacity signals without stopping the Telegram workers.
+
+The latest state is available at `GET /api/v2/bots/{id}/expansion`. Configure the scan with `DB_EXPANSION_POLL_SECONDS`, `DB_EXPANSION_BATCH_SIZE`, `DB_EXPANSION_MAX_DOCS`, `DB_EXPANSION_MAX_BYTES`, `DB_EXPANSION_LOCK_SECONDS`, and `DB_EXPANSION_COOLDOWN_SECONDS`.

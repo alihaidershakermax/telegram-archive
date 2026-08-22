@@ -111,6 +111,32 @@ const (
 	ManagedBotUnhealthy = "unhealthy"
 )
 
+// ExpansionState tracks the parent controller's automatic database expansion for one bot.
+type ExpansionState struct {
+	BotID           int64     `bson:"_id" json:"bot_id"`
+	DatabaseName    string    `bson:"database_name" json:"database_name"`
+	SchemaVersion   int       `bson:"schema_version" json:"schema_version"`
+	Status          string    `bson:"status" json:"status"`
+	UsersCount      int64     `bson:"users_count" json:"users_count"`
+	FilesCount      int64     `bson:"files_count" json:"files_count"`
+	StorageBytes    int64     `bson:"storage_bytes" json:"storage_bytes"`
+	CapacityTier    string    `bson:"capacity_tier" json:"capacity_tier"`
+	ExpansionCount  int64     `bson:"expansion_count" json:"expansion_count"`
+	LastRunAt       time.Time `bson:"last_run_at,omitempty" json:"last_run_at,omitempty"`
+	LastCompletedAt time.Time `bson:"last_completed_at,omitempty" json:"last_completed_at,omitempty"`
+	NextEligibleAt  time.Time `bson:"next_eligible_at,omitempty" json:"next_eligible_at,omitempty"`
+	LockOwner       string    `bson:"lock_owner,omitempty" json:"-"`
+	LockUntil       time.Time `bson:"lock_until,omitempty" json:"-"`
+	LastError       string    `bson:"last_error,omitempty" json:"last_error,omitempty"`
+}
+
+const (
+	ExpansionReady    = "ready"
+	ExpansionRunning  = "running"
+	ExpansionComplete = "completed"
+	ExpansionFailed   = "failed"
+)
+
 // AIIndex stores AI-generated metadata for a file inside one bot namespace.
 type AIIndex struct {
 	FileID      int       `bson:"file_id" json:"file_id"`

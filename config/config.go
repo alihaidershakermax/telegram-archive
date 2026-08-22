@@ -11,32 +11,39 @@ import (
 
 // Config holds all bot configuration loaded from environment variables.
 type Config struct {
-	BotToken                  string
-	OwnerID                   int64
-	ArchiveChannelID          int64
-	MongoURI                  string
-	DBName                    string
-	BroadcastChannelID        int64
-	BroadcastDelay            float64
-	CacheTTLSeconds           int
-	WelcomePhoto              string
-	APIKey                    string
-	APIRateLimit              int
-	AIBaseURL                 string
-	AIAPIKey                  string
-	AIModel                   string
-	AIRequestTimeoutSeconds   int
-	FactoryEncryptionKey      string
-	FactoryMaxBotsPerOwner    int
-	FactoryWorkers            int
-	StorageQueuePollSeconds   int
-	StorageMaxAttempts        int
-	StorageRetryBaseSeconds   int
-	StorageQueueBatchSize     int
-	FactoryDefaultMaxUsers    int64
-	FactoryDefaultMaxFiles    int64
-	FactoryDefaultMaxBytes    int64
-	FactoryDefaultMaxRequests int
+	BotToken                   string
+	OwnerID                    int64
+	ArchiveChannelID           int64
+	MongoURI                   string
+	DBName                     string
+	BroadcastChannelID         int64
+	BroadcastDelay             float64
+	CacheTTLSeconds            int
+	WelcomePhoto               string
+	APIKey                     string
+	APIRateLimit               int
+	AIBaseURL                  string
+	AIAPIKey                   string
+	AIModel                    string
+	AIRequestTimeoutSeconds    int
+	FactoryEncryptionKey       string
+	FactoryMaxBotsPerOwner     int
+	FactoryWorkers             int
+	StorageQueuePollSeconds    int
+	StorageMaxAttempts         int
+	StorageRetryBaseSeconds    int
+	StorageQueueBatchSize      int
+	FactoryDefaultMaxUsers     int64
+	FactoryDefaultMaxFiles     int64
+	FactoryDefaultMaxBytes     int64
+	FactoryDefaultMaxRequests  int
+	DBAutoExpansion            bool
+	DBExpansionPollSeconds     int
+	DBExpansionBatchSize       int
+	DBExpansionMaxDocs         int64
+	DBExpansionMaxBytes        int64
+	DBExpansionLockSeconds     int
+	DBExpansionCooldownSeconds int
 }
 
 // Text constants
@@ -96,31 +103,38 @@ func Load() {
 	}
 
 	Cfg = &Config{
-		BotToken:                  getEnvRequired("BOT_TOKEN"),
-		OwnerID:                   getEnvInt64Required("OWNER_ID"),
-		ArchiveChannelID:          getEnvInt64Required("ARCHIVE_CHANNEL_ID"),
-		MongoURI:                  getEnvRequired("MONGO_URI"),
-		DBName:                    getEnvDefault("DB_NAME", "telegram_archive_db"),
-		BroadcastDelay:            getEnvFloat("BROADCAST_DELAY", 0.05),
-		CacheTTLSeconds:           getEnvInt("CACHE_TTL_SECONDS", 60),
-		WelcomePhoto:              os.Getenv("WELCOME_PHOTO"),
-		APIKey:                    os.Getenv("API_KEY"),
-		APIRateLimit:              getEnvInt("API_RATE_LIMIT", 60),
-		AIBaseURL:                 getEnvDefault("AI_BASE_URL", os.Getenv("OPENAI_API_BASE")),
-		AIAPIKey:                  getEnvDefault("AI_API_KEY", os.Getenv("OPENAI_API_KEY")),
-		AIModel:                   getEnvDefault("AI_MODEL", "gpt-5-mini"),
-		AIRequestTimeoutSeconds:   getEnvInt("AI_REQUEST_TIMEOUT_SECONDS", 45),
-		FactoryEncryptionKey:      os.Getenv("FACTORY_ENCRYPTION_KEY"),
-		FactoryMaxBotsPerOwner:    getEnvInt("FACTORY_MAX_BOTS_PER_OWNER", 5),
-		FactoryWorkers:            getEnvInt("FACTORY_WORKERS", 8),
-		StorageQueuePollSeconds:   getEnvInt("STORAGE_QUEUE_POLL_SECONDS", 5),
-		StorageMaxAttempts:        getEnvInt("STORAGE_MAX_ATTEMPTS", 5),
-		StorageRetryBaseSeconds:   getEnvInt("STORAGE_RETRY_BASE_SECONDS", 5),
-		StorageQueueBatchSize:     getEnvInt("STORAGE_QUEUE_BATCH_SIZE", 10),
-		FactoryDefaultMaxUsers:    getEnvInt64("FACTORY_DEFAULT_MAX_USERS", 10000),
-		FactoryDefaultMaxFiles:    getEnvInt64("FACTORY_DEFAULT_MAX_FILES", 10000),
-		FactoryDefaultMaxBytes:    getEnvInt64("FACTORY_DEFAULT_MAX_STORAGE_BYTES", 5368709120),
-		FactoryDefaultMaxRequests: getEnvInt("FACTORY_DEFAULT_MAX_REQUESTS_PER_MINUTE", 120),
+		BotToken:                   getEnvRequired("BOT_TOKEN"),
+		OwnerID:                    getEnvInt64Required("OWNER_ID"),
+		ArchiveChannelID:           getEnvInt64Required("ARCHIVE_CHANNEL_ID"),
+		MongoURI:                   getEnvRequired("MONGO_URI"),
+		DBName:                     getEnvDefault("DB_NAME", "telegram_archive_db"),
+		BroadcastDelay:             getEnvFloat("BROADCAST_DELAY", 0.05),
+		CacheTTLSeconds:            getEnvInt("CACHE_TTL_SECONDS", 60),
+		WelcomePhoto:               os.Getenv("WELCOME_PHOTO"),
+		APIKey:                     os.Getenv("API_KEY"),
+		APIRateLimit:               getEnvInt("API_RATE_LIMIT", 60),
+		AIBaseURL:                  getEnvDefault("AI_BASE_URL", os.Getenv("OPENAI_API_BASE")),
+		AIAPIKey:                   getEnvDefault("AI_API_KEY", os.Getenv("OPENAI_API_KEY")),
+		AIModel:                    getEnvDefault("AI_MODEL", "gpt-5-mini"),
+		AIRequestTimeoutSeconds:    getEnvInt("AI_REQUEST_TIMEOUT_SECONDS", 45),
+		FactoryEncryptionKey:       os.Getenv("FACTORY_ENCRYPTION_KEY"),
+		FactoryMaxBotsPerOwner:     getEnvInt("FACTORY_MAX_BOTS_PER_OWNER", 5),
+		FactoryWorkers:             getEnvInt("FACTORY_WORKERS", 8),
+		StorageQueuePollSeconds:    getEnvInt("STORAGE_QUEUE_POLL_SECONDS", 5),
+		StorageMaxAttempts:         getEnvInt("STORAGE_MAX_ATTEMPTS", 5),
+		StorageRetryBaseSeconds:    getEnvInt("STORAGE_RETRY_BASE_SECONDS", 5),
+		StorageQueueBatchSize:      getEnvInt("STORAGE_QUEUE_BATCH_SIZE", 10),
+		FactoryDefaultMaxUsers:     getEnvInt64("FACTORY_DEFAULT_MAX_USERS", 10000),
+		FactoryDefaultMaxFiles:     getEnvInt64("FACTORY_DEFAULT_MAX_FILES", 10000),
+		FactoryDefaultMaxBytes:     getEnvInt64("FACTORY_DEFAULT_MAX_STORAGE_BYTES", 5368709120),
+		FactoryDefaultMaxRequests:  getEnvInt("FACTORY_DEFAULT_MAX_REQUESTS_PER_MINUTE", 120),
+		DBAutoExpansion:            getEnvBool("DB_AUTO_EXPANSION", true),
+		DBExpansionPollSeconds:     getEnvInt("DB_EXPANSION_POLL_SECONDS", 60),
+		DBExpansionBatchSize:       getEnvInt("DB_EXPANSION_BATCH_SIZE", 500),
+		DBExpansionMaxDocs:         getEnvInt64("DB_EXPANSION_MAX_DOCS", 100000),
+		DBExpansionMaxBytes:        getEnvInt64("DB_EXPANSION_MAX_BYTES", 10737418240),
+		DBExpansionLockSeconds:     getEnvInt("DB_EXPANSION_LOCK_SECONDS", 300),
+		DBExpansionCooldownSeconds: getEnvInt("DB_EXPANSION_COOLDOWN_SECONDS", 300),
 	}
 
 	bcID := os.Getenv("BROADCAST_CHANNEL_ID")
@@ -165,6 +179,18 @@ func getEnvInt64(key string, def int64) int64 {
 	}
 	val, err := strconv.ParseInt(s, 10, 64)
 	if err != nil || val < 0 {
+		return def
+	}
+	return val
+}
+
+func getEnvBool(key string, def bool) bool {
+	s := os.Getenv(key)
+	if s == "" {
+		return def
+	}
+	val, err := strconv.ParseBool(s)
+	if err != nil {
 		return def
 	}
 	return val

@@ -118,6 +118,17 @@ func (s *Server) factoryV2Bot(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == http.MethodGet && action == "":
 		writeJSON(w, http.StatusOK, map[string]interface{}{"data": row})
+	case r.Method == http.MethodGet && action == "expansion":
+		if s.expansion == nil {
+			writeError(w, http.StatusServiceUnavailable, "auto-expansion is not configured")
+			return
+		}
+		state, err := factory.ExpansionState(r.Context(), row.TelegramBotID)
+		if err != nil {
+			writeFactoryError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"data": state})
 	case r.Method == http.MethodPost && action == "ai-index":
 		var body factoryAIIndexBody
 		if !decodeJSON(w, r, &body) || body.FileID <= 0 || strings.TrimSpace(body.Text) == "" {
@@ -359,10 +370,12 @@ func (s *Server) factoryMonitor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	type monitorRow struct {
-		Bot   interface{}                `json:"bot"`
-		Usage services.Usage             `json:"usage"`
-		Queue services.StorageQueueStats `json:"queue"`
+		Bot       interface{}                `json:"bot"`
+		Usage     services.Usage             `json:"usage"`
+		Queue     services.StorageQueueStats `json:"queue"`
+		Expansion interface{}                `json:"expansion,omitempty"`
 	}
+
 	result := make([]monitorRow, 0, len(rows))
 	for _, row := range rows {
 		usage, usageErr := services.GetUsage(db.WithBotDatabase(r.Context(), row.TelegramBotID))
@@ -371,7 +384,12 @@ func (s *Server) factoryMonitor(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "failed to load bot monitor data")
 			return
 		}
-		result = append(result, monitorRow{Bot: row, Usage: usage, Queue: queue})
+		var expansion interface{}
+		if state, stateErr := factory.ExpansionState(r.Context(), row.TelegramBotID); stateErr == nil {
+			expansion = state
+		}
+		result = append(result, monitorRow{Bot: row, Usage: usage, Queue: queue, Expansion: expansion})
+
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"data": result, "count": len(result)})
 }
