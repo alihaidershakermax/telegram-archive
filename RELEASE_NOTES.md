@@ -6,9 +6,7 @@ This release contains the professional Go implementation of Telegram Archive Bot
 
 ### Included
 
-The bot includes Telegram archive browsing and uploads, role-based administration, image-aware file delivery, secure share links, authenticated HTTP API endpoints, OpenAI-compatible AI commands, ZIP bundling, and advanced archive search.
-
-Advanced search supports text queries, file type, category, subject, date range, bounded pagination, and sorting by newest, oldest, name, or downloads. The Telegram command is `/search`; the HTTP endpoint is `/api/v1/search`.
+The bot includes Telegram archive browsing and uploads, role-based administration, document-based file delivery for all media including images, secure share links, authenticated HTTP API endpoints, OpenAI-compatible AI commands, and ZIP bundling.
 
 ### Security and operations
 
