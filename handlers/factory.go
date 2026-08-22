@@ -15,14 +15,17 @@ import (
 
 var botFactory *factory.Manager
 
+func isParentBotOwner(bot *tgbotapi.BotAPI, userID int64) bool {
+	return bot != nil && storageBot(bot) == bot && services.IsOwner(userID)
+}
+
 // SetBotFactory wires the lifecycle manager after the database is ready.
 func SetBotFactory(manager *factory.Manager) { botFactory = manager }
 
 // HandleNewBotCommand starts a secure two-step token onboarding flow.
 func HandleNewBotCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
-	ctx := context.Background()
 	userID := message.From.ID
-	allowed, _ := services.Can(ctx, userID, "manage_bots")
+	allowed := isParentBotOwner(bot, userID)
 	if !allowed {
 		bot.Send(tgbotapi.NewMessage(message.Chat.ID, "⛔ إنشاء البوتات متاح للمالك أو المشرفين المخولين فقط."))
 		return
@@ -41,6 +44,10 @@ func HandleNewBotCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 
 // HandleMyBotsCommand renders safe metadata for the caller's managed bots.
 func HandleMyBotsCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
+	if !isParentBotOwner(bot, message.From.ID) {
+		bot.Send(tgbotapi.NewMessage(message.Chat.ID, "⛔ إدارة البوتات متاحة لمالك البوت الأب فقط."))
+		return
+	}
 	if botFactory == nil {
 		bot.Send(tgbotapi.NewMessage(message.Chat.ID, "⚠️ Bot Factory غير مفعّل حالياً."))
 		return
@@ -65,7 +72,7 @@ func HandleMyBotsCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 
 // HandleDatabasePanelCommand shows cluster management controls in the parent bot.
 func HandleDatabasePanelCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
-	allowed, _ := services.Can(context.Background(), message.From.ID, "manage_bots")
+	allowed := isParentBotOwner(bot, message.From.ID)
 	if !allowed {
 		bot.Send(tgbotapi.NewMessage(message.Chat.ID, "⛔ لوحة قواعد البيانات متاحة للمالك أو المشرفين المخولين فقط."))
 		return
@@ -94,7 +101,7 @@ func HandleDatabasePanelCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message)
 
 // HandleAddDatabaseCommand starts the private, two-step cluster onboarding flow.
 func HandleAddDatabaseCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
-	allowed, _ := services.Can(context.Background(), message.From.ID, "manage_bots")
+	allowed := isParentBotOwner(bot, message.From.ID)
 	if !allowed {
 		bot.Send(tgbotapi.NewMessage(message.Chat.ID, "⛔ لا تملك صلاحية إضافة قاعدة."))
 		return
@@ -115,7 +122,7 @@ func HandleDatabaseListCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) 
 }
 
 func HandleMigrationCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
-	allowed, _ := services.Can(context.Background(), message.From.ID, "manage_bots")
+	allowed := isParentBotOwner(bot, message.From.ID)
 	if !allowed || botFactory == nil {
 		bot.Send(tgbotapi.NewMessage(message.Chat.ID, "⛔ لا تملك صلاحية نقل قواعد البوتات."))
 		return
@@ -144,7 +151,7 @@ func HandleMigrationCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 }
 
 func HandleMigrationStatusCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
-	allowed, _ := services.Can(context.Background(), message.From.ID, "manage_bots")
+	allowed := isParentBotOwner(bot, message.From.ID)
 	if !allowed || botFactory == nil {
 		bot.Send(tgbotapi.NewMessage(message.Chat.ID, "⛔ لا تملك صلاحية عرض حالة النقل."))
 		return
@@ -174,7 +181,7 @@ func HandleMigrationStatusCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Messag
 }
 
 func HandleDatabaseClusterAction(bot *tgbotapi.BotAPI, message *tgbotapi.Message, action string) {
-	allowed, _ := services.Can(context.Background(), message.From.ID, "manage_bots")
+	allowed := isParentBotOwner(bot, message.From.ID)
 	if !allowed || botFactory == nil {
 		bot.Send(tgbotapi.NewMessage(message.Chat.ID, "⛔ لا تملك صلاحية إدارة قواعد البيانات."))
 		return
@@ -203,6 +210,9 @@ func HandleDatabaseClusterAction(bot *tgbotapi.BotAPI, message *tgbotapi.Message
 
 // HandleFactoryText consumes factory token and cluster onboarding steps.
 func HandleFactoryText(bot *tgbotapi.BotAPI, message *tgbotapi.Message) bool {
+	if message == nil || message.From == nil || !isParentBotOwner(bot, message.From.ID) {
+		return false
+	}
 	userID := message.From.ID
 	state := GetStateForBot(bot, userID)
 	state.Mu.Lock()
@@ -280,7 +290,7 @@ func HandleFactoryInfoCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQue
 	if query == nil || query.Message == nil {
 		return
 	}
-	allowed, _ := services.Can(context.Background(), query.From.ID, "manage_bots")
+	allowed := isParentBotOwner(bot, query.From.ID)
 	if !allowed {
 		bot.Send(tgbotapi.NewMessage(query.Message.Chat.ID, "⛔ إدارة البوتات متاحة للمالك أو المشرفين المخولين فقط."))
 		return

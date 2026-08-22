@@ -426,12 +426,31 @@ func (m *Manager) startRecord(ctx context.Context, record models.ManagedBot) err
 	return m.startWorker(record, bot)
 }
 
+func configureManagedBotCommands(bot *tgbotapi.BotAPI) {
+	if bot == nil {
+		return
+	}
+	commands := []tgbotapi.BotCommand{
+		{Command: "start", Description: "🚀 القائمة الرئيسية"},
+		{Command: "group", Description: "⚙️ إعدادات المجموعة"},
+		{Command: "subscribe", Description: "🔔 الاشتراك في مادة"},
+		{Command: "unsubscribe", Description: "🔕 إلغاء اشتراك مادة"},
+		{Command: "subscriptions", Description: "📚 اشتراكاتي"},
+		{Command: "vault", Description: "🔐 Personal Vault"},
+		{Command: "vaultadd", Description: "➕ حفظ ملف في Vault"},
+	}
+	if _, err := bot.Request(tgbotapi.NewSetMyCommands(commands...)); err != nil {
+		log.Printf("managed bot %d command menu setup failed: %v", bot.Self.ID, err)
+	}
+}
+
 func (m *Manager) startWorker(record models.ManagedBot, bot *tgbotapi.BotAPI) error {
 	if record.ClusterID != "" {
 		db.SetBotClusterRoute(record.TelegramBotID, record.ClusterID)
 	}
 	worker := &managedWorker{bot: bot, stop: make(chan struct{}), stats: &workerStats{}, closed: make(chan struct{})}
 	worker.stats.lastSeenUnix.Store(time.Now().Unix())
+	configureManagedBotCommands(bot)
 	m.mu.Lock()
 	if old := m.workers[record.ID]; old != nil {
 		m.mu.Unlock()

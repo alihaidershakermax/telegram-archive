@@ -134,7 +134,7 @@ func HandleStart(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 
 	// Send welcome message
 	welcome := services.GetWelcomeSettings(ctx)
-	kb := keyboards.MainMenuKeyboard()
+	kb := MainMenuKeyboardForUser(bot, user.ID, isAdmin)
 
 	if welcome.Photo != "" {
 		photo := tgbotapi.NewPhoto(message.Chat.ID, tgbotapi.FileID(welcome.Photo))
@@ -155,6 +155,11 @@ func HandleStart(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 		msg.ReplyMarkup = kb
 		bot.Send(msg)
 	}
+}
+
+func MainMenuKeyboardForUser(bot *tgbotapi.BotAPI, userID int64, isAdmin bool) tgbotapi.InlineKeyboardMarkup {
+	showFactory := bot != nil && storageBot(bot) == bot && services.IsOwner(userID)
+	return keyboards.MainMenuKeyboardForRole(isAdmin, showFactory)
 }
 
 // HandlePanel handles the /panel command.

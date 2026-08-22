@@ -156,11 +156,11 @@ The process listens on the platform-provided `PORT`. Do not hardcode a productio
 
 For Telegram long polling, configure Koyeb with `Minimum instances = 1`, disable Scale-to-Zero, and set the HTTP health check to `GET /healthz`. This keeps the controller and managed workers alive between incoming HTTP requests.
 
-For Telegram long polling, configure the Koyeb Service with **at least one permanent instance** (`Minimum instances = 1`) and disable Scale-to-Zero. A polling bot does not receive regular public HTTP traffic, so an idle policy can stop its process and interrupt updates. Configure the HTTP health check as `GET /healthz` on the exposed `PORT`, with a startup grace period long enough for MongoDB and Telegram initialization. The endpoint is intentionally public, lightweight, and independent of database readiness.
+For Telegram long polling, configure the Koyeb Service with **at least one permanent instance** (`Minimum instances = 1`) and disable Scale-to-Zero. A polling bot does not receive regular public HTTP traffic, so an idle policy can stop its process and interrupt updates. This applies to the parent and all managed child workers because they run inside the same process. Configure the HTTP health check as `GET /healthz` on the exposed `PORT`, with a startup grace period long enough for MongoDB and Telegram initialization. The endpoint is intentionally public, lightweight, and independent of database readiness.
 
 ## Bot Factory and API v2
 
-Bot Factory lets authorized operators register Telegram bot tokens that they already created through BotFather. The service validates each token with Telegram, encrypts it with AES-256-GCM before persistence, keeps only safe metadata in API responses, and starts an isolated long-polling worker for each active bot. Use `/newbot` and `/mybots` in Telegram, or the authenticated API v2 routes below.
+Bot Factory is controlled exclusively by the owner of the parent bot. The service validates each token created through BotFather, encrypts it with AES-256-GCM before persistence, keeps only safe metadata in API responses, and starts an isolated long-polling worker for each active bot. Factory commands and the factory callback are rejected on child bots and for all non-owner users. Child workers receive their own public command menu and route messages, callbacks, and file updates through the same application handler.
 
 Set `FACTORY_ENCRYPTION_KEY` to a random 32-byte key encoded as 64 hexadecimal characters or base64. Never reuse `API_KEY`, never commit the value, and rotate it only through a planned re-encryption migration. `FACTORY_MAX_BOTS_PER_OWNER` limits registrations and `FACTORY_WORKERS` documents the worker capacity for future queued jobs.
 

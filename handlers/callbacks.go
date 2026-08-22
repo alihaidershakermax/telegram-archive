@@ -54,7 +54,7 @@ func HandleCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 	switch {
 	case data == "back_main":
 		welcome := services.GetWelcomeSettings(ctx)
-		kb := keyboards.MainMenuKeyboard()
+		kb := MainMenuKeyboardForUser(bot, userID, isAdmin)
 		utils.EditOrSend(bot, query.ID, chatID, msgID, welcome.Message, &kb, hasPhoto)
 
 	case data == "view_archive" || data == "back_cats":
