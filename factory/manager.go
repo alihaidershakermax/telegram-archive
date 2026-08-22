@@ -451,6 +451,7 @@ func configureManagedBotCommands(bot *tgbotapi.BotAPI) {
 	}
 	commands := []tgbotapi.BotCommand{
 		{Command: "start", Description: "🚀 القائمة الرئيسية"},
+		{Command: "id", Description: "🆔 عرض Telegram ID"},
 		{Command: "group", Description: "⚙️ إعدادات المجموعة"},
 		{Command: "subscribe", Description: "🔔 الاشتراك في مادة"},
 		{Command: "unsubscribe", Description: "🔕 إلغاء اشتراك مادة"},

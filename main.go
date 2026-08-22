@@ -67,6 +67,8 @@ func main() {
 	// Set bot commands menu in Telegram
 	botCmds := []tgbotapi.BotCommand{
 		{Command: "start", Description: "🚀 القائمة الرئيسية / بدء البوت"},
+		{Command: "id", Description: "🆔 عرض Telegram ID"},
+
 		{Command: "panel", Description: "⚙️ لوحة التحكم (للمشرفين)"},
 		{Command: "broadcast", Description: "📢 إرسال إذاعة (للمشرفين)"},
 		{Command: "ban", Description: "⛔ حظر مستخدم (للمشرفين)"},
@@ -177,6 +179,9 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 		switch msg.Command() {
 		case "start":
 			handlers.HandleStart(bot, msg)
+		case "id":
+			handlers.HandleIDCommand(bot, msg)
+
 		case "panel":
 			handlers.HandlePanel(bot, msg)
 		case "broadcast":

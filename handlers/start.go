@@ -162,6 +162,14 @@ func MainMenuKeyboardForUser(bot *tgbotapi.BotAPI, userID int64, isAdmin bool) t
 	return keyboards.MainMenuKeyboardForRole(isAdmin, showFactory)
 }
 
+// HandleIDCommand returns the caller's Telegram ID for secure handoff setup.
+func HandleIDCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
+	if message == nil || message.From == nil || message.Chat == nil {
+		return
+	}
+	_, _ = bot.Send(tgbotapi.NewMessage(message.Chat.ID, fmt.Sprintf("Telegram user ID: %d", message.From.ID)))
+}
+
 // HandlePanel handles the /panel command.
 func HandlePanel(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 	ctx := archiveContext(bot)
