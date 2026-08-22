@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"strings"
@@ -44,7 +43,7 @@ func allowAIRequest(userID int64) bool {
 func SetAIClient(client *ai.Client) { assistantClient = client }
 
 func HandleAICommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message, summarize bool) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	userID := message.From.ID
 	if services.IsBanned(ctx, userID) || services.IsMuted(ctx, userID) {
 		bot.Send(tgbotapi.NewMessage(message.Chat.ID, "⛔ لا يمكنك استخدام مساعد الذكاء الاصطناعي حالياً."))

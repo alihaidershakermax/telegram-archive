@@ -19,6 +19,7 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"telegram-archive-bot/ai"
 	"telegram-archive-bot/config"
+	"telegram-archive-bot/db"
 	"telegram-archive-bot/factory"
 	"telegram-archive-bot/services"
 )
@@ -58,6 +59,36 @@ func NewServer(cfg *config.Config, bot *tgbotapi.BotAPI) *Server {
 
 // SetFactory attaches the managed-bot lifecycle service to API v2.
 func (s *Server) SetFactory(manager *factory.Manager) { s.factory = manager }
+
+// archiveContextFromRequest selects the primary database by default. A trusted
+// API caller may opt into a managed bot namespace with X-Telegram-Bot-ID, but
+// only after the ID is verified against the factory registry.
+func (s *Server) archiveContextFromRequest(r *http.Request) (context.Context, error) {
+	raw := strings.TrimSpace(r.Header.Get("X-Telegram-Bot-ID"))
+	if raw == "" {
+		return r.Context(), nil
+	}
+	botID, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || botID <= 0 {
+		return nil, errors.New("invalid X-Telegram-Bot-ID")
+	}
+	if s.bot != nil && s.bot.Self.ID == botID {
+		return r.Context(), nil
+	}
+	if s.factory == nil {
+		return nil, errors.New("managed bot is not registered")
+	}
+	rows, err := s.factory.List(r.Context(), 0, true)
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		if row.TelegramBotID == botID {
+			return db.WithBotDatabase(r.Context(), botID), nil
+		}
+	}
+	return nil, errors.New("managed bot is not registered")
+}
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
@@ -135,7 +166,12 @@ func (s *Server) categories(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	rows, err := services.GetCategories(r.Context())
+	ctx, err := s.archiveContextFromRequest(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	rows, err := services.GetCategories(ctx)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to load categories")
 		return
@@ -153,7 +189,12 @@ func (s *Server) subjects(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "category_id must be a positive integer")
 		return
 	}
-	rows, err := services.GetSubjects(r.Context(), &id)
+	ctx, err := s.archiveContextFromRequest(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	rows, err := services.GetSubjects(ctx, &id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to load subjects")
 		return
@@ -171,7 +212,12 @@ func (s *Server) files(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "subject_id must be a positive integer")
 		return
 	}
-	rows, err := services.GetFiles(r.Context(), id)
+	ctx, err := s.archiveContextFromRequest(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	rows, err := services.GetFiles(ctx, id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to load files")
 		return

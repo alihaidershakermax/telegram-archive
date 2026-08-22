@@ -1,9 +1,11 @@
 package handlers
 
 import (
-	"context"
+	"bytes"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"strconv"
 	"time"
 
@@ -28,7 +30,7 @@ func autoFinishUpload(bot *tgbotapi.BotAPI, userID int64, state *models.UserStat
 		return
 	}
 
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	cats, err := services.GetCategories(ctx)
 	if err != nil || len(cats) == 0 {
 		msg := tgbotapi.NewMessage(userID, "❌ لا توجد تصنيفات. أضف تصنيفاً أولاً من لوحة التحكم.")
@@ -44,39 +46,126 @@ func autoFinishUpload(bot *tgbotapi.BotAPI, userID int64, state *models.UserStat
 }
 
 // sendFileToChannel sends a file to the archive channel.
-func sendFileToChannel(bot *tgbotapi.BotAPI, fileID, fileType, name string) (int, error) {
+func sendFileToChannel(bot *tgbotapi.BotAPI, fileID, fileType, name string) (int, string, error) {
 	chatID := config.Cfg.ArchiveChannelID
+	sender := storageBot(bot)
 	var msg tgbotapi.Chattable
 
-	switch fileType {
-	case "document":
-		doc := tgbotapi.NewDocument(chatID, tgbotapi.FileID(fileID))
-		doc.Caption = name
-		msg = doc
-	case "video":
-		msg = tgbotapi.NewVideo(chatID, tgbotapi.FileID(fileID))
-	case "audio":
-		msg = tgbotapi.NewAudio(chatID, tgbotapi.FileID(fileID))
-	case "voice":
-		msg = tgbotapi.NewVoice(chatID, tgbotapi.FileID(fileID))
-	case "animation":
-		msg = tgbotapi.NewAnimation(chatID, tgbotapi.FileID(fileID))
-	case "photo":
-		msg = tgbotapi.NewPhoto(chatID, tgbotapi.FileID(fileID))
-	default:
-		return 0, fmt.Errorf("unsupported file type: %s", fileType)
+	if sender != bot {
+		data, err := downloadTelegramBytes(bot, fileID)
+		if err != nil {
+			return 0, "", fmt.Errorf("transfer file from managed bot: %w", err)
+		}
+		msg, err = fileMessageFromBytes(chatID, data, fileType, name)
+		if err != nil {
+			return 0, "", err
+		}
+	} else {
+		switch fileType {
+		case "document":
+			doc := tgbotapi.NewDocument(chatID, tgbotapi.FileID(fileID))
+			doc.Caption = name
+			msg = doc
+		case "video":
+			msg = tgbotapi.NewVideo(chatID, tgbotapi.FileID(fileID))
+		case "audio":
+			msg = tgbotapi.NewAudio(chatID, tgbotapi.FileID(fileID))
+		case "voice":
+			msg = tgbotapi.NewVoice(chatID, tgbotapi.FileID(fileID))
+		case "animation":
+			msg = tgbotapi.NewAnimation(chatID, tgbotapi.FileID(fileID))
+		case "photo":
+			msg = tgbotapi.NewPhoto(chatID, tgbotapi.FileID(fileID))
+		default:
+			return 0, "", fmt.Errorf("unsupported file type: %s", fileType)
+		}
 	}
 
-	sent, err := bot.Send(msg)
+	sent, err := sender.Send(msg)
 	if err != nil {
-		return 0, err
+		return 0, "", err
 	}
-	return sent.MessageID, nil
+	storedID := fileIDFromMessage(&sent, fileType)
+	if storedID == "" {
+		return sent.MessageID, "", fmt.Errorf("storage gateway returned no file_id")
+	}
+	return sent.MessageID, storedID, nil
+}
+
+func fileIDFromMessage(message *tgbotapi.Message, fileType string) string {
+	if message == nil {
+		return ""
+	}
+	switch fileType {
+	case "document":
+		if message.Document != nil {
+			return message.Document.FileID
+		}
+	case "video":
+		if message.Video != nil {
+			return message.Video.FileID
+		}
+	case "audio":
+		if message.Audio != nil {
+			return message.Audio.FileID
+		}
+	case "voice":
+		if message.Voice != nil {
+			return message.Voice.FileID
+		}
+	case "animation":
+		if message.Animation != nil {
+			return message.Animation.FileID
+		}
+	case "photo":
+		if len(message.Photo) > 0 {
+			return message.Photo[len(message.Photo)-1].FileID
+		}
+	}
+	return ""
+}
+
+func downloadTelegramBytes(bot *tgbotapi.BotAPI, fileID string) ([]byte, error) {
+	file, err := bot.GetFile(tgbotapi.FileConfig{FileID: fileID})
+	if err != nil {
+		return nil, err
+	}
+	resp, err := http.Get(file.Link(bot.Token))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("telegram file download returned %s", resp.Status)
+	}
+	return io.ReadAll(resp.Body)
+}
+
+func fileMessageFromBytes(chatID int64, data []byte, fileType, name string) (tgbotapi.Chattable, error) {
+	input := tgbotapi.FileBytes{Name: name, Bytes: bytes.Clone(data)}
+	switch fileType {
+	case "document":
+		doc := tgbotapi.NewDocument(chatID, input)
+		doc.Caption = name
+		return doc, nil
+	case "video":
+		return tgbotapi.NewVideo(chatID, input), nil
+	case "audio":
+		return tgbotapi.NewAudio(chatID, input), nil
+	case "voice":
+		return tgbotapi.NewVoice(chatID, input), nil
+	case "animation":
+		return tgbotapi.NewAnimation(chatID, input), nil
+	case "photo":
+		return tgbotapi.NewPhoto(chatID, input), nil
+	default:
+		return nil, fmt.Errorf("unsupported file type: %s", fileType)
+	}
 }
 
 // saveAllFiles saves all pending uploads to the database and channel.
 func saveAllFiles(bot *tgbotapi.BotAPI, chatID int64, userID int64, state *models.UserState) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	state.Mu.Lock()
 	pending := append([]models.PendingUpload(nil), state.PendingUploads...)
 	var locCopy *models.UploadLocation
@@ -100,14 +189,15 @@ func saveAllFiles(bot *tgbotapi.BotAPI, chatID int64, userID int64, state *model
 	saved, failed := 0, 0
 	for _, p := range pending {
 		msgID := 0
-		channelMsgID, err := sendFileToChannel(bot, p.TelegramFileID, p.FileType, p.Name)
+		channelMsgID, storedFileID, err := sendFileToChannel(bot, p.TelegramFileID, p.FileType, p.Name)
 		if err != nil {
 			log.Printf("Send to channel failed: %v", err)
 		} else {
 			msgID = channelMsgID
 		}
 
-		_, err = services.SaveFile(ctx, p.Name, p.TelegramFileID, p.FileType, loc.SubID, msgID, p.FileSize)
+		_, err = services.SaveFile(ctx, p.Name, storedFileID, p.FileType, loc.SubID, msgID, p.FileSize)
+
 		if err != nil {
 			log.Printf("Upload save failed: %v", err)
 			failed++

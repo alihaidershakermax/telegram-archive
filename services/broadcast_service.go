@@ -19,7 +19,7 @@ type BroadcastResult struct {
 
 // SendBroadcast sends a text message to all non-banned users using a streaming cursor.
 func SendBroadcast(ctx context.Context, bot *tgbotapi.BotAPI, message string, delay time.Duration) BroadcastResult {
-	cursor, err := db.Col("users").Find(ctx, bson.M{"is_banned": bson.M{"$ne": true}})
+	cursor, err := db.ColScoped(ctx, "users").Find(ctx, bson.M{"is_banned": bson.M{"$ne": true}})
 	if err != nil {
 		log.Printf("Broadcast: failed to fetch users: %v", err)
 		return BroadcastResult{}

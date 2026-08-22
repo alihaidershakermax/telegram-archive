@@ -54,12 +54,10 @@ func invalidateSubjects() {
 }
 
 func invalidateFiles(subjectID *int) {
+	// Cache keys include the scope; clearing all entries is the safest and
+	// simplest invalidation after a write in any bot database.
 	filesCacheMu.Lock()
-	if subjectID == nil {
-		filesCache = map[string]*cacheEntry[models.File]{}
-	} else {
-		delete(filesCache, itoa(*subjectID))
-	}
+	filesCache = map[string]*cacheEntry[models.File]{}
 	filesCacheMu.Unlock()
 }
 
@@ -71,21 +69,26 @@ func itoa(n int) string {
 
 // GetCategories returns all categories, sorted by order.
 func GetCategories(ctx context.Context) ([]models.Category, error) {
-	categoriesCacheMu.RLock()
-	if categoriesCache != nil && cacheValid(categoriesCache.ts) {
-		defer categoriesCacheMu.RUnlock()
-		return categoriesCache.data, nil
+	// Scoped bot databases intentionally bypass the legacy process-wide cache.
+	// This prevents one bot's category list from being returned to another bot.
+	useCache := !db.IsScoped(ctx)
+	if useCache {
+		categoriesCacheMu.RLock()
+		if categoriesCache != nil && cacheValid(categoriesCache.ts) {
+			defer categoriesCacheMu.RUnlock()
+			return categoriesCache.data, nil
+		}
+		categoriesCacheMu.RUnlock()
+
+		categoriesCacheMu.Lock()
+		defer categoriesCacheMu.Unlock()
+
+		if categoriesCache != nil && cacheValid(categoriesCache.ts) {
+			return categoriesCache.data, nil
+		}
 	}
-	categoriesCacheMu.RUnlock()
 
-	categoriesCacheMu.Lock()
-	defer categoriesCacheMu.Unlock()
-
-	if categoriesCache != nil && cacheValid(categoriesCache.ts) {
-		return categoriesCache.data, nil
-	}
-
-	col := db.Col("categories")
+	col := db.ColScoped(ctx, "categories")
 	opts := options.Find().SetSort(bson.D{{Key: "order", Value: 1}})
 	cursor, err := col.Find(ctx, bson.M{}, opts)
 	if err != nil {
@@ -122,7 +125,9 @@ func GetCategories(ctx context.Context) ([]models.Category, error) {
 		}
 	}
 
-	categoriesCache = &cacheEntry[models.Category]{data: rows, ts: time.Now()}
+	if useCache {
+		categoriesCache = &cacheEntry[models.Category]{data: rows, ts: time.Now()}
+	}
 	return rows, nil
 }
 
@@ -139,7 +144,7 @@ func GetCategoryByID(ctx context.Context, catID int) (*models.Category, error) {
 	}
 	// Fallback to DB
 	var cat models.Category
-	err = db.Col("categories").FindOne(ctx, bson.M{"cat_id": catID}).Decode(&cat)
+	err = db.ColScoped(ctx, "categories").FindOne(ctx, bson.M{"cat_id": catID}).Decode(&cat)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +153,7 @@ func GetCategoryByID(ctx context.Context, catID int) (*models.Category, error) {
 
 // CreateCategory creates a new category.
 func CreateCategory(ctx context.Context, name string) (int, error) {
-	col := db.Col("categories")
+	col := db.ColScoped(ctx, "categories")
 	catID, err := db.GetNextID(ctx, "categories")
 	if err != nil {
 		return 0, err
@@ -181,7 +186,7 @@ func DeleteCategory(ctx context.Context, catID int) error {
 			log.Printf("Warning: failed to delete subject %d: %v", s.SubID, err)
 		}
 	}
-	_, err = db.Col("categories").DeleteOne(ctx, bson.M{"cat_id": catID})
+	_, err = db.ColScoped(ctx, "categories").DeleteOne(ctx, bson.M{"cat_id": catID})
 	invalidateCategories()
 	return err
 }
@@ -190,12 +195,11 @@ func DeleteCategory(ctx context.Context, catID int) error {
 
 // GetSubjects returns subjects, optionally filtered by categoryID.
 func GetSubjects(ctx context.Context, categoryID *int) ([]models.Subject, error) {
-	key := "all"
+	key := db.ScopeKey(ctx) + ":all"
 	q := bson.M{}
 	if categoryID != nil {
-		key = bson.Raw{}.String() // will fix
+		key = db.ScopeKey(ctx) + ":" + intToStr(*categoryID)
 		q = bson.M{"category_id": *categoryID}
-		key = intToStr(*categoryID)
 	}
 
 	subjectsCacheMu.RLock()
@@ -212,7 +216,7 @@ func GetSubjects(ctx context.Context, categoryID *int) ([]models.Subject, error)
 		return c.data, nil
 	}
 
-	col := db.Col("subjects")
+	col := db.ColScoped(ctx, "subjects")
 	opts := options.Find().SetSort(bson.D{{Key: "order", Value: 1}, {Key: "name", Value: 1}})
 	cursor, err := col.Find(ctx, q, opts)
 	if err != nil {
@@ -264,7 +268,7 @@ func GetSubjects(ctx context.Context, categoryID *int) ([]models.Subject, error)
 // GetSubjectByID returns a single subject by its sub_id.
 func GetSubjectByID(ctx context.Context, subID int) (*models.Subject, error) {
 	var sub models.Subject
-	err := db.Col("subjects").FindOne(ctx, bson.M{"sub_id": subID}).Decode(&sub)
+	err := db.ColScoped(ctx, "subjects").FindOne(ctx, bson.M{"sub_id": subID}).Decode(&sub)
 	if err != nil {
 		return nil, err
 	}
@@ -273,7 +277,7 @@ func GetSubjectByID(ctx context.Context, subID int) (*models.Subject, error) {
 
 // CreateSubject creates a new subject under a category.
 func CreateSubject(ctx context.Context, name string, categoryID int) (int, error) {
-	col := db.Col("subjects")
+	col := db.ColScoped(ctx, "subjects")
 	subID, err := db.GetNextID(ctx, "subjects")
 	if err != nil {
 		return 0, err
@@ -303,9 +307,9 @@ func CreateSubject(ctx context.Context, name string, categoryID int) (int, error
 
 // DeleteSubject deletes a subject and all its files.
 func DeleteSubject(ctx context.Context, subID int) error {
-	_, _ = db.Col("files").DeleteMany(ctx, bson.M{"subject_id": subID})
+	_, _ = db.ColScoped(ctx, "files").DeleteMany(ctx, bson.M{"subject_id": subID})
 	invalidateFiles(&subID)
-	_, err := db.Col("subjects").DeleteOne(ctx, bson.M{"sub_id": subID})
+	_, err := db.ColScoped(ctx, "subjects").DeleteOne(ctx, bson.M{"sub_id": subID})
 	invalidateSubjects()
 	invalidateCategories()
 	return err
@@ -315,7 +319,7 @@ func DeleteSubject(ctx context.Context, subID int) error {
 
 // GetFiles returns all files for a subject, sorted by order.
 func GetFiles(ctx context.Context, subjectID int) ([]models.File, error) {
-	key := intToStr(subjectID)
+	key := db.ScopeKey(ctx) + ":" + intToStr(subjectID)
 
 	filesCacheMu.RLock()
 	if c, ok := filesCache[key]; ok && cacheValid(c.ts) {
@@ -331,7 +335,7 @@ func GetFiles(ctx context.Context, subjectID int) ([]models.File, error) {
 		return c.data, nil
 	}
 
-	col := db.Col("files")
+	col := db.ColScoped(ctx, "files")
 	q := bson.M{"subject_id": subjectID}
 	opts := options.Find().SetSort(bson.D{{Key: "order", Value: 1}, {Key: "name", Value: 1}})
 	cursor, err := col.Find(ctx, q, opts)
@@ -384,13 +388,13 @@ func GetFiles(ctx context.Context, subjectID int) ([]models.File, error) {
 // GetFileRow returns a file with its subject name.
 func GetFileRow(ctx context.Context, fileID int) (*models.FileRow, error) {
 	var f models.File
-	err := db.Col("files").FindOne(ctx, bson.M{"file_id": fileID}).Decode(&f)
+	err := db.ColScoped(ctx, "files").FindOne(ctx, bson.M{"file_id": fileID}).Decode(&f)
 	if err != nil {
 		return nil, err
 	}
 	subName := "غير معروف"
 	var sub models.Subject
-	if err := db.Col("subjects").FindOne(ctx, bson.M{"sub_id": f.SubjectID}).Decode(&sub); err == nil {
+	if err := db.ColScoped(ctx, "subjects").FindOne(ctx, bson.M{"sub_id": f.SubjectID}).Decode(&sub); err == nil {
 		subName = sub.Name
 	}
 	return &models.FileRow{File: f, SubjectName: subName}, nil
@@ -398,7 +402,7 @@ func GetFileRow(ctx context.Context, fileID int) (*models.FileRow, error) {
 
 // SaveFile inserts a new file into the database.
 func SaveFile(ctx context.Context, name, telegramFileID, fileType string, subjectID int, messageID int, fileSize int64) (int, error) {
-	col := db.Col("files")
+	col := db.ColScoped(ctx, "files")
 	fileID, err := db.GetNextID(ctx, "files")
 	if err != nil {
 		return 0, err
@@ -432,8 +436,8 @@ func SaveFile(ctx context.Context, name, telegramFileID, fileType string, subjec
 // DeleteFile deletes a single file.
 func DeleteFile(ctx context.Context, fileID int) error {
 	var f models.File
-	err := db.Col("files").FindOne(ctx, bson.M{"file_id": fileID}).Decode(&f)
-	_, delErr := db.Col("files").DeleteOne(ctx, bson.M{"file_id": fileID})
+	err := db.ColScoped(ctx, "files").FindOne(ctx, bson.M{"file_id": fileID}).Decode(&f)
+	_, delErr := db.ColScoped(ctx, "files").DeleteOne(ctx, bson.M{"file_id": fileID})
 	if err == nil {
 		invalidateFiles(&f.SubjectID)
 	}
@@ -461,7 +465,7 @@ func swapAndRenormalize(ctx context.Context, collection string, rows []bson.M, k
 		return false, nil
 	}
 	rows[idx], rows[newIdx] = rows[newIdx], rows[idx]
-	col := db.Col(collection)
+	col := db.ColScoped(ctx, collection)
 	for i, r := range rows {
 		if toInt(r["order"]) != i+1 {
 			_, err := col.UpdateOne(ctx,
@@ -493,7 +497,7 @@ func toInt(v interface{}) int {
 
 // MoveCategory moves a category up or down.
 func MoveCategory(ctx context.Context, catID int, direction string) (bool, error) {
-	col := db.Col("categories")
+	col := db.ColScoped(ctx, "categories")
 	opts := options.Find().SetSort(bson.D{{Key: "order", Value: 1}, {Key: "name", Value: 1}})
 	cursor, err := col.Find(ctx, bson.M{}, opts)
 	if err != nil {
@@ -516,7 +520,7 @@ func MoveSubject(ctx context.Context, subID int, direction string) (bool, error)
 	if err != nil {
 		return false, err
 	}
-	col := db.Col("subjects")
+	col := db.ColScoped(ctx, "subjects")
 	opts := options.Find().SetSort(bson.D{{Key: "order", Value: 1}, {Key: "name", Value: 1}})
 	cursor, err := col.Find(ctx, bson.M{"category_id": sub.CategoryID}, opts)
 	if err != nil {
@@ -536,11 +540,11 @@ func MoveSubject(ctx context.Context, subID int, direction string) (bool, error)
 // MoveFile moves a file up or down within its subject.
 func MoveFile(ctx context.Context, fileID int, direction string) (bool, error) {
 	var f models.File
-	err := db.Col("files").FindOne(ctx, bson.M{"file_id": fileID}).Decode(&f)
+	err := db.ColScoped(ctx, "files").FindOne(ctx, bson.M{"file_id": fileID}).Decode(&f)
 	if err != nil {
 		return false, err
 	}
-	col := db.Col("files")
+	col := db.ColScoped(ctx, "files")
 	opts := options.Find().SetSort(bson.D{{Key: "order", Value: 1}, {Key: "name", Value: 1}})
 	cursor, err := col.Find(ctx, bson.M{"subject_id": f.SubjectID}, opts)
 	if err != nil {
@@ -561,22 +565,22 @@ func MoveFile(ctx context.Context, fileID int, direction string) (bool, error) {
 
 // GetAllUsersCount returns total user count.
 func GetAllUsersCount(ctx context.Context) (int64, error) {
-	return db.Col("users").CountDocuments(ctx, bson.M{})
+	return db.ColScoped(ctx, "users").CountDocuments(ctx, bson.M{})
 }
 
 // GetAllFilesCount returns total file count.
 func GetAllFilesCount(ctx context.Context) (int64, error) {
-	return db.Col("files").CountDocuments(ctx, bson.M{})
+	return db.ColScoped(ctx, "files").CountDocuments(ctx, bson.M{})
 }
 
 // GetAllSubjectsCount returns total subject count.
 func GetAllSubjectsCount(ctx context.Context) (int64, error) {
-	return db.Col("subjects").CountDocuments(ctx, bson.M{})
+	return db.ColScoped(ctx, "subjects").CountDocuments(ctx, bson.M{})
 }
 
 // IncrementDownloads increments the download counter for a file.
 func IncrementDownloads(ctx context.Context, fileID int) error {
-	_, err := db.Col("files").UpdateOne(ctx,
+	_, err := db.ColScoped(ctx, "files").UpdateOne(ctx,
 		bson.M{"file_id": fileID},
 		bson.M{"$inc": bson.M{"downloads": 1}},
 	)
@@ -588,7 +592,7 @@ func GetTotalDownloads(ctx context.Context) (int64, error) {
 	pipeline := bson.A{
 		bson.M{"$group": bson.M{"_id": nil, "total": bson.M{"$sum": "$downloads"}}},
 	}
-	cursor, err := db.Col("files").Aggregate(ctx, pipeline)
+	cursor, err := db.ColScoped(ctx, "files").Aggregate(ctx, pipeline)
 	if err != nil {
 		return 0, err
 	}
@@ -611,7 +615,7 @@ type TopFile struct {
 
 // GetTopFiles returns the most downloaded files.
 func GetTopFiles(ctx context.Context, limit int) ([]TopFile, error) {
-	col := db.Col("files")
+	col := db.ColScoped(ctx, "files")
 	opts := options.Find().
 		SetSort(bson.D{{Key: "downloads", Value: -1}}).
 		SetLimit(int64(limit))
@@ -627,7 +631,7 @@ func GetTopFiles(ctx context.Context, limit int) ([]TopFile, error) {
 	for _, r := range rows {
 		subName := "غير معروف"
 		var sub models.Subject
-		if err := db.Col("subjects").FindOne(ctx, bson.M{"sub_id": r.SubjectID}).Decode(&sub); err == nil {
+		if err := db.ColScoped(ctx, "subjects").FindOne(ctx, bson.M{"sub_id": r.SubjectID}).Decode(&sub); err == nil {
 			subName = sub.Name
 		}
 		results = append(results, TopFile{

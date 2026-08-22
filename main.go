@@ -38,6 +38,7 @@ func main() {
 		log.Fatalf("Failed to create bot: %v", err)
 	}
 	log.Printf("Authorized on account %s", bot.Self.UserName)
+	handlers.SetStorageBot(bot)
 
 	// Start the optional Bot Factory. It stays disabled unless a strong
 	// encryption key is configured, so plaintext child-bot tokens are never persisted.

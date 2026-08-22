@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"net/url"
@@ -19,7 +18,7 @@ import (
 
 // HandleCallback routes all callback queries.
 func HandleCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	data := query.Data
 	userID := query.From.ID
 	chatID := query.Message.Chat.ID
@@ -165,7 +164,7 @@ func HandleCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 		if ok, _ := services.Can(ctx, userID, "manage_admins"); !ok {
 			return
 		}
-		WithState(userID, func(state *models.UserState) { state.Awaiting = &models.AwaitingState{Type: "add_admin"} })
+		WithStateForBot(bot, userID, func(state *models.UserState) { state.Awaiting = &models.AwaitingState{Type: "add_admin"} })
 		utils.EditOrSend(bot, query.ID, chatID, msgID, "👑 أرسل ID المستخدم لإضافته كأدمن (بعد الإضافة سيصبح «🥈 أدمن»).", nil, hasPhoto)
 
 	case strings.HasPrefix(data, "panel_rank_"):
@@ -221,7 +220,7 @@ func HandleCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 		if ok, _ := services.Can(ctx, userID, "manage_content"); !ok {
 			return
 		}
-		WithState(userID, func(state *models.UserState) { state.Awaiting = &models.AwaitingState{Type: "new_cat"} })
+		WithStateForBot(bot, userID, func(state *models.UserState) { state.Awaiting = &models.AwaitingState{Type: "new_cat"} })
 		utils.EditOrSend(bot, query.ID, chatID, msgID, "📝 أرسل اسم التصنيف الجديد:", nil, hasPhoto)
 
 	case strings.HasPrefix(data, "panel_new_sub_"):
@@ -229,7 +228,7 @@ func HandleCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 			return
 		}
 		catID := parseID(data, "panel_new_sub_")
-		WithState(userID, func(state *models.UserState) { state.Awaiting = &models.AwaitingState{Type: "new_sub", CatID: catID} })
+		WithStateForBot(bot, userID, func(state *models.UserState) { state.Awaiting = &models.AwaitingState{Type: "new_sub", CatID: catID} })
 		utils.EditOrSend(bot, query.ID, chatID, msgID, "📝 أرسل اسم المادة الجديدة:", nil, hasPhoto)
 
 	case strings.HasPrefix(data, "panel_del_sub_"):
@@ -296,7 +295,7 @@ func HandleCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 		if ok, _ := services.Can(ctx, userID, "broadcast"); !ok {
 			return
 		}
-		WithState(userID, func(state *models.UserState) { state.Awaiting = &models.AwaitingState{Type: "broadcast"} })
+		WithStateForBot(bot, userID, func(state *models.UserState) { state.Awaiting = &models.AwaitingState{Type: "broadcast"} })
 		utils.EditOrSend(bot, query.ID, chatID, msgID, "📢 أرسل نص الإذاعة الآن:", nil, hasPhoto)
 
 	case data == "panel_maint":
@@ -321,14 +320,14 @@ func HandleCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 		if ok, _ := services.Can(ctx, userID, "manage_settings"); !ok {
 			return
 		}
-		WithState(userID, func(state *models.UserState) { state.Awaiting = &models.AwaitingState{Type: "welcome_text"} })
+		WithStateForBot(bot, userID, func(state *models.UserState) { state.Awaiting = &models.AwaitingState{Type: "welcome_text"} })
 		utils.EditOrSend(bot, query.ID, chatID, msgID, "📝 أرسل نص رسالة الترحيب الجديد:", nil, hasPhoto)
 
 	case data == "panel_welcome_photo":
 		if ok, _ := services.Can(ctx, userID, "manage_settings"); !ok {
 			return
 		}
-		WithState(userID, func(state *models.UserState) { state.Awaiting = &models.AwaitingState{Type: "welcome_photo"} })
+		WithStateForBot(bot, userID, func(state *models.UserState) { state.Awaiting = &models.AwaitingState{Type: "welcome_photo"} })
 		utils.EditOrSend(bot, query.ID, chatID, msgID, "🖼️ أرسل صورة الترحيب الجديدة الآن:", nil, hasPhoto)
 
 	case data == "panel_welcome_preview":
@@ -342,7 +341,7 @@ func HandleCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 		if !canUpload {
 			return
 		}
-		WithState(userID, func(state *models.UserState) {
+		WithStateForBot(bot, userID, func(state *models.UserState) {
 			state.Awaiting = &models.AwaitingState{Type: "upload"}
 			state.PendingUploads = nil
 			state.UploadLoc = nil
@@ -355,7 +354,7 @@ func HandleCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 		if !canUpload {
 			return
 		}
-		WithState(userID, clearUploadState)
+		WithStateForBot(bot, userID, clearUploadState)
 		msg := tgbotapi.NewMessage(chatID, "🚫 تم إلغاء الرفع.")
 		bot.Send(msg)
 
@@ -380,7 +379,7 @@ func HandleCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 		if !canUpload {
 			return
 		}
-		state := GetState(userID)
+		state := GetStateForBot(bot, userID)
 		state.Mu.Lock()
 		count := len(state.PendingUploads)
 		state.Mu.Unlock()
@@ -397,14 +396,14 @@ func HandleCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 // ── User navigation helpers ─────────────────────────────────
 
 func showCategories(bot *tgbotapi.BotAPI, chatID int64, msgID int, hasPhoto bool) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	cats, _ := services.GetCategories(ctx)
 	kb := keyboards.CategoriesKeyboard(cats)
 	utils.EditOrSend(bot, "", chatID, msgID, "📂 اختر التصنيف:", &kb, hasPhoto)
 }
 
 func showSubjects(bot *tgbotapi.BotAPI, chatID int64, msgID, catID int, hasPhoto bool) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	subs, _ := services.GetSubjects(ctx, &catID)
 	if len(subs) == 0 {
 		kb := tgbotapi.NewInlineKeyboardMarkup(
@@ -420,7 +419,7 @@ func showSubjects(bot *tgbotapi.BotAPI, chatID int64, msgID, catID int, hasPhoto
 }
 
 func showFiles(bot *tgbotapi.BotAPI, chatID int64, msgID, subID int, hasPhoto bool) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	files, _ := services.GetFiles(ctx, subID)
 	sub, _ := services.GetSubjectByID(ctx, subID)
 	catID := 0
@@ -445,7 +444,7 @@ func showFiles(bot *tgbotapi.BotAPI, chatID int64, msgID, subID int, hasPhoto bo
 }
 
 func showFileDetails(bot *tgbotapi.BotAPI, chatID int64, msgID, fileID int, hasPhoto bool) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	f, err := services.GetFileRow(ctx, fileID)
 	if err != nil {
 		utils.EditOrSend(bot, "", chatID, msgID, "❌ الملف غير موجود.", nil, hasPhoto)
@@ -462,17 +461,21 @@ func showFileDetails(bot *tgbotapi.BotAPI, chatID int64, msgID, fileID int, hasP
 }
 
 func downloadFile(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, fileID int) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	f, err := services.GetFileRow(ctx, fileID)
 	if err != nil {
 		return
 	}
 	services.IncrementDownloads(ctx, fileID)
+	sender := storageBot(bot)
 	action := tgbotapi.NewChatAction(query.Message.Chat.ID, "upload_document")
-	bot.Send(action)
+	sender.Send(action)
 	doc := tgbotapi.NewDocument(query.Message.Chat.ID, tgbotapi.FileID(f.TelegramFileID))
 	doc.Caption = f.Name
-	bot.Send(doc)
+	if _, err := sender.Send(doc); err != nil {
+		// Never retry with the managed bot: Telegram file_id values are bot-scoped.
+		log.Printf("storage gateway file send failed for %d: %v", fileID, err)
+	}
 }
 
 func downloadFileAsDocument(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, fileID int) {
@@ -481,7 +484,7 @@ func downloadFileAsDocument(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery,
 }
 
 func shareFile(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, fileID int, hasPhoto bool) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	chatID := query.Message.Chat.ID
 	msgID := query.Message.MessageID
 
@@ -490,6 +493,8 @@ func shareFile(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, fileID int, 
 		utils.EditOrSend(bot, query.ID, chatID, msgID, "❌ الملف غير موجود.", nil, hasPhoto)
 		return
 	}
+	// Keep the deep link on the current bot so its scoped shared_files
+	// collection can resolve the hash; only the actual media send uses storageBot.
 	botInfo, _ := bot.GetMe()
 	shareHash, err := services.CreateShareLink(ctx, f.TelegramFileID, f.FileType, query.From.ID, 7)
 	if err != nil {
@@ -541,7 +546,7 @@ func showAbout(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, hasPhoto boo
 // ── Admin callback helpers ──────────────────────────────────
 
 func showStats(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, hasPhoto bool) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	chatID := query.Message.Chat.ID
 	msgID := query.Message.MessageID
 
@@ -567,7 +572,7 @@ func showStats(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, hasPhoto boo
 }
 
 func showUsers(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, data string, hasPhoto bool) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	chatID := query.Message.Chat.ID
 	msgID := query.Message.MessageID
 
@@ -587,7 +592,7 @@ func showUsers(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, data string,
 		totalPages = 1
 	}
 
-	state := GetState(query.From.ID)
+	state := GetStateForBot(bot, query.From.ID)
 	state.UsersPage = page
 
 	kb := keyboards.AdminUsersKeyboard(users, page, totalPages)
@@ -596,7 +601,7 @@ func showUsers(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, data string,
 }
 
 func showUserProfile(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, uid int64, hasPhoto bool) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	chatID := query.Message.Chat.ID
 	msgID := query.Message.MessageID
 	actorID := query.From.ID
@@ -648,7 +653,7 @@ func showUserProfile(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, uid in
 	text := fmt.Sprintf("👤 ملف المستخدم\n━━━━━━━━━━━━━━━\n🆔 ID: %d\n📋 الاسم: %s\n🔗 المعرف: %s\n📅 تاريخ الانضمام: %s\n🕑 آخر ظهور: %s\n━━━━━━━━━━━━━━━\n%s\n%s\n%s",
 		uid, name, username, createdAt, lastSeen, bannedStr, mutedStr, rankLine)
 
-	state := GetState(actorID)
+	state := GetStateForBot(bot, actorID)
 	page := state.UsersPage
 	if page == 0 {
 		page = 1
@@ -664,7 +669,7 @@ func showUserProfile(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, uid in
 }
 
 func adminBanUser(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, uid int64, hasPhoto bool) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	actorID := query.From.ID
 	canManage, _ := services.CanManage(ctx, actorID, uid)
 	if !canManage {
@@ -678,7 +683,7 @@ func adminBanUser(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, uid int64
 }
 
 func adminUnbanUser(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, uid int64, hasPhoto bool) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	actorID := query.From.ID
 	canManage, _ := services.CanManage(ctx, actorID, uid)
 	if !canManage {
@@ -692,7 +697,7 @@ func adminUnbanUser(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, uid int
 }
 
 func adminMuteUser(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, uid int64, hasPhoto bool) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	actorID := query.From.ID
 	canManage, _ := services.CanManage(ctx, actorID, uid)
 	if !canManage {
@@ -706,7 +711,7 @@ func adminMuteUser(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, uid int6
 }
 
 func adminUnmuteUser(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, uid int64, hasPhoto bool) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	actorID := query.From.ID
 	canManage, _ := services.CanManage(ctx, actorID, uid)
 	if !canManage {
@@ -720,7 +725,7 @@ func adminUnmuteUser(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, uid in
 }
 
 func showAdmins(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, hasPhoto bool) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	chatID := query.Message.Chat.ID
 	msgID := query.Message.MessageID
 
@@ -749,7 +754,7 @@ func showAdmins(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, hasPhoto bo
 }
 
 func showRankPicker(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, uid int64, hasPhoto bool) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	chatID := query.Message.Chat.ID
 	msgID := query.Message.MessageID
 
@@ -764,7 +769,7 @@ func showRankPicker(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, uid int
 		return
 	}
 
-	state := GetState(query.From.ID)
+	state := GetStateForBot(bot, query.From.ID)
 	page := state.UsersPage
 	if page == 0 {
 		page = 1
@@ -775,7 +780,7 @@ func showRankPicker(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, uid int
 }
 
 func adminSetRank(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, uid int64, rank string, hasPhoto bool) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	actorID := query.From.ID
 
 	actorRank, _ := services.GetUserRank(ctx, actorID)
@@ -819,7 +824,7 @@ func adminSetRank(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, uid int64
 }
 
 func adminRemoveAdmin(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, uid int64, hasPhoto bool) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	actorID := query.From.ID
 	canManage, _ := services.CanManage(ctx, actorID, uid)
 	if !canManage {
@@ -833,21 +838,21 @@ func adminRemoveAdmin(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, uid i
 }
 
 func showContentCategories(bot *tgbotapi.BotAPI, chatID int64, msgID int, hasPhoto bool) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	cats, _ := services.GetCategories(ctx)
 	kb := keyboards.AdminContentKeyboard(cats)
 	utils.EditOrSend(bot, "", chatID, msgID, "📁 إدارة المحتوى - اختر تصنيفاً:", &kb, hasPhoto)
 }
 
 func showContentSubjects(bot *tgbotapi.BotAPI, chatID int64, msgID, catID int, hasPhoto bool) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	subs, _ := services.GetSubjects(ctx, &catID)
 	kb := keyboards.AdminContentSubjectsKeyboard(subs, catID)
 	utils.EditOrSend(bot, "", chatID, msgID, "📁 اختر مادة:", &kb, hasPhoto)
 }
 
 func showContentFiles(bot *tgbotapi.BotAPI, chatID int64, msgID, subID int, hasPhoto bool) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	files, _ := services.GetFiles(ctx, subID)
 	sub, _ := services.GetSubjectByID(ctx, subID)
 	catID := 0
@@ -859,7 +864,7 @@ func showContentFiles(bot *tgbotapi.BotAPI, chatID int64, msgID, subID int, hasP
 }
 
 func adminDeleteSubject(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, subID int, hasPhoto bool) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	sub, _ := services.GetSubjectByID(ctx, subID)
 	name := fmt.Sprintf("%d", subID)
 	if sub != nil {
@@ -871,7 +876,7 @@ func adminDeleteSubject(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, sub
 }
 
 func adminDeleteFile(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, fileID int, hasPhoto bool) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	f, _ := services.GetFileRow(ctx, fileID)
 	name := fmt.Sprintf("%d", fileID)
 	subjectID := 0
@@ -887,7 +892,7 @@ func adminDeleteFile(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, fileID
 }
 
 func adminDeleteCategory(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, catID int, hasPhoto bool) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	cat, _ := services.GetCategoryByID(ctx, catID)
 	name := fmt.Sprintf("%d", catID)
 	if cat != nil {
@@ -899,7 +904,7 @@ func adminDeleteCategory(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, ca
 }
 
 func adminMoveCategory(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, catID int, direction string, hasPhoto bool) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	moved, _ := services.MoveCategory(ctx, catID, direction)
 	if moved {
 		services.LogAdminAction(ctx, query.From.ID, "move_category", map[string]interface{}{"cat_id": catID, "direction": direction})
@@ -908,7 +913,7 @@ func adminMoveCategory(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, catI
 }
 
 func adminMoveSubject(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, subID int, direction string, hasPhoto bool) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	sub, _ := services.GetSubjectByID(ctx, subID)
 	moved, _ := services.MoveSubject(ctx, subID, direction)
 	if moved {
@@ -926,7 +931,7 @@ func adminMoveSubject(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, subID
 }
 
 func adminMoveFile(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, fileID int, direction string, hasPhoto bool) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	f, _ := services.GetFileRow(ctx, fileID)
 	moved, _ := services.MoveFile(ctx, fileID, direction)
 	if moved {
@@ -944,7 +949,7 @@ func adminMoveFile(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, fileID i
 }
 
 func adminToggleMaintenance(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, hasPhoto bool) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	chatID := query.Message.Chat.ID
 	msgID := query.Message.MessageID
 
@@ -964,7 +969,7 @@ func adminToggleMaintenance(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery,
 }
 
 func showLogs(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, data string, hasPhoto bool) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	chatID := query.Message.Chat.ID
 	msgID := query.Message.MessageID
 
@@ -1014,7 +1019,7 @@ func showLogs(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, data string, 
 }
 
 func showWelcomeSettings(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, hasPhoto bool) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	chatID := query.Message.Chat.ID
 	msgID := query.Message.MessageID
 
@@ -1034,7 +1039,7 @@ func showWelcomeSettings(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, ha
 }
 
 func showWelcomePreview(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	chatID := query.Message.Chat.ID
 
 	s := services.GetWelcomeSettings(ctx)
@@ -1051,7 +1056,7 @@ func showWelcomePreview(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 }
 
 func handleUploadCatSelect(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, catID int, hasPhoto bool) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	chatID := query.Message.Chat.ID
 	msgID := query.Message.MessageID
 	userID := query.From.ID
@@ -1067,7 +1072,7 @@ func handleUploadCatSelect(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, 
 		return
 	}
 
-	state := GetState(userID)
+	state := GetStateForBot(bot, userID)
 	state.Mu.Lock()
 	state.UploadLoc = &models.UploadLocation{CatID: catID}
 	state.Mu.Unlock()
@@ -1078,10 +1083,10 @@ func handleUploadCatSelect(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, 
 }
 
 func handleUploadSubSelect(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, subID int) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	userID := query.From.ID
 
-	state := GetState(userID)
+	state := GetStateForBot(bot, userID)
 	state.Mu.Lock()
 	if state.UploadLoc == nil {
 		state.Mu.Unlock()

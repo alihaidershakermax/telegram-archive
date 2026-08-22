@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
@@ -16,6 +17,41 @@ var (
 	client *mongo.Client
 	db     *mongo.Database
 )
+
+type botDatabaseKey struct{}
+
+// WithBotDatabase scopes archive queries to a dedicated MongoDB database.
+// The primary bot keeps using the configured legacy database when no scope is set.
+func WithBotDatabase(ctx context.Context, telegramBotID int64) context.Context {
+	if telegramBotID == 0 {
+		return ctx
+	}
+	return context.WithValue(ctx, botDatabaseKey{}, fmt.Sprintf("archive_bot_%d", telegramBotID))
+}
+
+func ScopeKey(ctx context.Context) string {
+	if name, ok := ctx.Value(botDatabaseKey{}).(string); ok && name != "" {
+		return name
+	}
+	return "primary"
+}
+
+func IsScoped(ctx context.Context) bool {
+	return ScopeKey(ctx) != "primary"
+}
+
+func databaseForContext(ctx context.Context) *mongo.Database {
+	if name, ok := ctx.Value(botDatabaseKey{}).(string); ok && name != "" && client != nil {
+		return client.Database(name)
+	}
+	return db
+}
+
+// ColScoped returns a collection from the bot-specific database when the
+// context carries a managed-bot scope, otherwise it returns the primary DB collection.
+func ColScoped(ctx context.Context, name string) *mongo.Collection {
+	return databaseForContext(ctx).Collection(name)
+}
 
 // Init connects to MongoDB and stores the client/db globally.
 func Init() {
@@ -90,33 +126,38 @@ var indexSpecs = []indexSpec{
 	{"admin_logs", bson.D{{Key: "timestamp", Value: -1}}, false},
 }
 
-// EnsureIndexes creates all required MongoDB indexes.
+// EnsureIndexes creates all required MongoDB indexes in the primary database.
 func EnsureIndexes() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	EnsureIndexesForContext(context.Background())
+}
 
+// EnsureIndexesForContext creates the same indexes in the database selected by ctx.
+func EnsureIndexesForContext(ctx context.Context) {
 	for _, spec := range indexSpecs {
-		model := mongo.IndexModel{
-			Keys: spec.Keys,
-		}
+		model := mongo.IndexModel{Keys: spec.Keys}
 		if spec.Unique {
 			model.Options = options.Index().SetUnique(true)
 		}
-		_, err := Col(spec.Collection).Indexes().CreateOne(ctx, model)
+		_, err := ColScoped(ctx, spec.Collection).Indexes().CreateOne(ctx, model)
 		if err != nil {
-			log.Printf("Warning: Index create failed (%s): %v", spec.Collection, err)
+			log.Printf("Warning: Index create failed (%s, %s): %v", ScopeKey(ctx), spec.Collection, err)
 		}
 	}
-	log.Println("MongoDB indexes ensured")
+	log.Printf("MongoDB indexes ensured for %s", ScopeKey(ctx))
 }
 
 // GetNextID atomically increments and returns the next ID for a collection.
 func GetNextID(ctx context.Context, collectionName string) (int, error) {
+	return GetNextIDScoped(ctx, collectionName)
+}
+
+// GetNextIDScoped keeps auto-increment counters inside each bot database.
+func GetNextIDScoped(ctx context.Context, collectionName string) (int, error) {
 	opts := options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After)
 	var result struct {
 		Seq int `bson:"seq"`
 	}
-	err := Col("counters").FindOneAndUpdate(
+	err := ColScoped(ctx, "counters").FindOneAndUpdate(
 		ctx,
 		bson.M{"_id": collectionName},
 		bson.M{"$inc": bson.M{"seq": 1}},

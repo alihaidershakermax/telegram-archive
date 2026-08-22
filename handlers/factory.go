@@ -31,7 +31,7 @@ func HandleNewBotCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 		bot.Send(tgbotapi.NewMessage(message.Chat.ID, "⚠️ Bot Factory غير مفعّل. أضف FACTORY_ENCRYPTION_KEY ثم أعد التشغيل."))
 		return
 	}
-	WithState(userID, func(state *models.UserState) {
+	WithStateForBot(bot, userID, func(state *models.UserState) {
 		state.Awaiting = &models.AwaitingState{Type: "factory_bot_token"}
 	})
 	msg := tgbotapi.NewMessage(message.Chat.ID,
@@ -66,7 +66,7 @@ func HandleMyBotsCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 // HandleFactoryText consumes only the token step of the factory flow.
 func HandleFactoryText(bot *tgbotapi.BotAPI, message *tgbotapi.Message) bool {
 	userID := message.From.ID
-	state := GetState(userID)
+	state := GetStateForBot(bot, userID)
 	state.Mu.Lock()
 	awaiting := state.Awaiting
 	if awaiting != nil {
@@ -78,7 +78,7 @@ func HandleFactoryText(bot *tgbotapi.BotAPI, message *tgbotapi.Message) bool {
 		return false
 	}
 	if botFactory == nil {
-		ClearAwaiting(userID)
+		ClearAwaitingForBot(bot, userID)
 		bot.Send(tgbotapi.NewMessage(message.Chat.ID, "⚠️ Bot Factory غير مفعّل حالياً."))
 		return true
 	}
@@ -90,7 +90,7 @@ func HandleFactoryText(bot *tgbotapi.BotAPI, message *tgbotapi.Message) bool {
 		bot.Send(tgbotapi.NewMessage(message.Chat.ID, "❌ تعذر تسجيل التوكن. تأكد أنه صحيح وغير مستخدم مسبقاً ثم أعد المحاولة."))
 		return true
 	}
-	ClearAwaiting(userID)
+	ClearAwaitingForBot(bot, userID)
 	services.LogAdminAction(context.Background(), userID, "register_managed_bot", map[string]interface{}{"bot_id": row.ID, "username": row.Username})
 	bot.Send(tgbotapi.NewMessage(message.Chat.ID, fmt.Sprintf("✅ تم تسجيل @%s وتشغيله بنجاح.\n\nالمعرّف: %s\nالحالة: %s\n\nاستخدم /mybots لعرض الحالة.", row.Username, row.ID, row.Status)))
 	return true
@@ -98,7 +98,7 @@ func HandleFactoryText(bot *tgbotapi.BotAPI, message *tgbotapi.Message) bool {
 
 // HandleCancelCommand clears any pending factory or content workflow.
 func HandleCancelCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
-	ClearAwaiting(message.From.ID)
+	ClearAwaitingForBot(bot, message.From.ID)
 	bot.Send(tgbotapi.NewMessage(message.Chat.ID, "✅ تم إلغاء العملية الحالية."))
 }
 

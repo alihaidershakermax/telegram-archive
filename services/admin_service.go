@@ -108,23 +108,26 @@ func InvalidateAdmins() {
 
 // GetAdmins returns all admin records, with caching.
 func GetAdmins(ctx context.Context) ([]models.Admin, error) {
-	adminsMu.RLock()
-	if adminsCache != nil && adminsCacheValid() {
-		defer adminsMu.RUnlock()
-		return adminsCache, nil
-	}
-	adminsMu.RUnlock()
+	useCache := !db.IsScoped(ctx)
+	if useCache {
+		adminsMu.RLock()
+		if adminsCache != nil && adminsCacheValid() {
+			defer adminsMu.RUnlock()
+			return adminsCache, nil
+		}
+		adminsMu.RUnlock()
 
-	adminsMu.Lock()
-	defer adminsMu.Unlock()
+		adminsMu.Lock()
+		defer adminsMu.Unlock()
 
-	// Double-check after acquiring write lock
-	if adminsCache != nil && adminsCacheValid() {
-		return adminsCache, nil
+		// Double-check after acquiring write lock
+		if adminsCache != nil && adminsCacheValid() {
+			return adminsCache, nil
+		}
 	}
 
 	opts := options.Find().SetSort(bson.D{{Key: "added_at", Value: 1}})
-	cursor, err := db.Col("admins").Find(ctx, bson.M{}, opts)
+	cursor, err := db.ColScoped(ctx, "admins").Find(ctx, bson.M{}, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -135,8 +138,10 @@ func GetAdmins(ctx context.Context) ([]models.Admin, error) {
 	if rows == nil {
 		rows = []models.Admin{}
 	}
-	adminsCache = rows
-	adminsCacheTS = time.Now()
+	if useCache {
+		adminsCache = rows
+		adminsCacheTS = time.Now()
+	}
 	return rows, nil
 }
 
@@ -238,7 +243,7 @@ func AddAdmin(ctx context.Context, userID int64, username, firstName, rank strin
 		firstName = "ID:" + bson.Raw(bson.RawValue{}.String()).String()
 	}
 	opts := options.Update().SetUpsert(true)
-	_, err := db.Col("admins").UpdateOne(ctx,
+	_, err := db.ColScoped(ctx, "admins").UpdateOne(ctx,
 		bson.M{"id": userID},
 		bson.M{"$set": bson.M{
 			"id":         userID,
@@ -256,7 +261,7 @@ func AddAdmin(ctx context.Context, userID int64, username, firstName, rank strin
 // SetAdminRank changes an admin's rank or removes them.
 func SetAdminRank(ctx context.Context, userID int64, rank string, username, firstName string) error {
 	if rank == "" {
-		_, err := db.Col("admins").DeleteOne(ctx, bson.M{"id": userID})
+		_, err := db.ColScoped(ctx, "admins").DeleteOne(ctx, bson.M{"id": userID})
 		InvalidateAdmins()
 		return err
 	}
@@ -268,7 +273,7 @@ func SetAdminRank(ctx context.Context, userID int64, rank string, username, firs
 		doc["first_name"] = firstName
 	}
 	opts := options.Update().SetUpsert(true)
-	_, err := db.Col("admins").UpdateOne(ctx,
+	_, err := db.ColScoped(ctx, "admins").UpdateOne(ctx,
 		bson.M{"id": userID},
 		bson.M{"$set": doc, "$setOnInsert": bson.M{"id": userID}},
 		opts,
@@ -279,7 +284,7 @@ func SetAdminRank(ctx context.Context, userID int64, rank string, username, firs
 
 // RemoveAdmin removes an admin.
 func RemoveAdmin(ctx context.Context, userID int64) error {
-	_, err := db.Col("admins").DeleteOne(ctx, bson.M{"id": userID})
+	_, err := db.ColScoped(ctx, "admins").DeleteOne(ctx, bson.M{"id": userID})
 	InvalidateAdmins()
 	return err
 }
@@ -293,7 +298,7 @@ func GetAdminLogs(ctx context.Context, page, perPage int) ([]models.AdminLog, er
 		SetSort(bson.D{{Key: "timestamp", Value: -1}}).
 		SetSkip(skip).
 		SetLimit(int64(perPage))
-	cursor, err := db.Col("admin_logs").Find(ctx, bson.M{}, opts)
+	cursor, err := db.ColScoped(ctx, "admin_logs").Find(ctx, bson.M{}, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -306,35 +311,43 @@ func GetAdminLogs(ctx context.Context, page, perPage int) ([]models.AdminLog, er
 
 // GetAdminLogsCount returns the total number of admin log entries.
 func GetAdminLogsCount(ctx context.Context) (int64, error) {
-	return db.Col("admin_logs").CountDocuments(ctx, bson.M{})
+	return db.ColScoped(ctx, "admin_logs").CountDocuments(ctx, bson.M{})
 }
 
 // ── Maintenance mode ────────────────────────────────────────
 
 // IsMaintenanceEnabled checks if maintenance mode is on.
 func IsMaintenanceEnabled(ctx context.Context) bool {
-	maintMu.RLock()
-	if maintCache != nil && time.Since(maintCacheTS) < time.Duration(config.Cfg.CacheTTLSeconds)*time.Second {
-		val := *maintCache
+	useCache := !db.IsScoped(ctx)
+	if useCache {
+		maintMu.RLock()
+		if maintCache != nil && time.Since(maintCacheTS) < time.Duration(config.Cfg.CacheTTLSeconds)*time.Second {
+			val := *maintCache
+			maintMu.RUnlock()
+			return val
+		}
 		maintMu.RUnlock()
-		return val
-	}
-	maintMu.RUnlock()
 
-	maintMu.Lock()
-	defer maintMu.Unlock()
+		maintMu.Lock()
+		defer maintMu.Unlock()
+	}
 
 	var row models.BotSetting
-	err := db.Col("bot_settings").FindOne(ctx, bson.M{"key": "maintenance_mode"}).Decode(&row)
+	err := db.ColScoped(ctx, "bot_settings").FindOne(ctx, bson.M{"key": "maintenance_mode"}).Decode(&row)
 	if err != nil {
 		val := false
-		maintCache = &val
-		maintCacheTS = time.Now()
+		if useCache {
+			maintCache = &val
+			maintCacheTS = time.Now()
+		}
 		return false
+
 	}
 	val := row.Value == "true"
-	maintCache = &val
-	maintCacheTS = time.Now()
+	if useCache {
+		maintCache = &val
+		maintCacheTS = time.Now()
+	}
 	return val
 }
 
@@ -345,7 +358,7 @@ func SetMaintenanceMode(ctx context.Context, enabled bool) error {
 		val = "true"
 	}
 	opts := options.Update().SetUpsert(true)
-	_, err := db.Col("bot_settings").UpdateOne(ctx,
+	_, err := db.ColScoped(ctx, "bot_settings").UpdateOne(ctx,
 		bson.M{"key": "maintenance_mode"},
 		bson.M{"$set": bson.M{"value": val}},
 		opts,
@@ -362,7 +375,7 @@ func LogAdminAction(ctx context.Context, adminID int64, action string, details m
 	if details == nil {
 		details = map[string]interface{}{}
 	}
-	_, err := db.Col("admin_logs").InsertOne(ctx, bson.M{
+	_, err := db.ColScoped(ctx, "admin_logs").InsertOne(ctx, bson.M{
 		"admin_id":  adminID,
 		"action":    action,
 		"details":   details,

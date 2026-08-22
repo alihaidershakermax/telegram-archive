@@ -14,7 +14,7 @@ import (
 // SaveUser upserts a user record based on Telegram user info.
 func SaveUser(ctx context.Context, userID int64, username, firstName string) error {
 	opts := options.Update().SetUpsert(true)
-	_, err := db.Col("users").UpdateOne(ctx,
+	_, err := db.ColScoped(ctx, "users").UpdateOne(ctx,
 		bson.M{"user_id": userID},
 		bson.M{
 			"$set": bson.M{
@@ -37,7 +37,7 @@ func SaveUser(ctx context.Context, userID int64, username, firstName string) err
 // GetUser returns a user by their Telegram user ID.
 func GetUser(ctx context.Context, userID int64) (*models.User, error) {
 	var user models.User
-	err := db.Col("users").FindOne(ctx, bson.M{"user_id": userID}).Decode(&user)
+	err := db.ColScoped(ctx, "users").FindOne(ctx, bson.M{"user_id": userID}).Decode(&user)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +49,7 @@ func IsBanned(ctx context.Context, userID int64) bool {
 	var user struct {
 		IsBanned bool `bson:"is_banned"`
 	}
-	err := db.Col("users").FindOne(ctx, bson.M{"user_id": userID}).Decode(&user)
+	err := db.ColScoped(ctx, "users").FindOne(ctx, bson.M{"user_id": userID}).Decode(&user)
 	if err != nil {
 		return false
 	}
@@ -58,7 +58,7 @@ func IsBanned(ctx context.Context, userID int64) bool {
 
 // Ban bans a user.
 func Ban(ctx context.Context, userID int64) error {
-	_, err := db.Col("users").UpdateOne(ctx,
+	_, err := db.ColScoped(ctx, "users").UpdateOne(ctx,
 		bson.M{"user_id": userID},
 		bson.M{"$set": bson.M{"is_banned": true}},
 	)
@@ -67,7 +67,7 @@ func Ban(ctx context.Context, userID int64) error {
 
 // Unban unbans a user.
 func Unban(ctx context.Context, userID int64) error {
-	_, err := db.Col("users").UpdateOne(ctx,
+	_, err := db.ColScoped(ctx, "users").UpdateOne(ctx,
 		bson.M{"user_id": userID},
 		bson.M{"$set": bson.M{"is_banned": false}},
 	)
@@ -79,7 +79,7 @@ func IsMuted(ctx context.Context, userID int64) bool {
 	var user struct {
 		IsMuted bool `bson:"is_muted"`
 	}
-	err := db.Col("users").FindOne(ctx, bson.M{"user_id": userID}).Decode(&user)
+	err := db.ColScoped(ctx, "users").FindOne(ctx, bson.M{"user_id": userID}).Decode(&user)
 	if err != nil {
 		return false
 	}
@@ -88,7 +88,7 @@ func IsMuted(ctx context.Context, userID int64) bool {
 
 // Mute mutes a user.
 func Mute(ctx context.Context, userID int64) error {
-	_, err := db.Col("users").UpdateOne(ctx,
+	_, err := db.ColScoped(ctx, "users").UpdateOne(ctx,
 		bson.M{"user_id": userID},
 		bson.M{"$set": bson.M{"is_muted": true}},
 	)
@@ -97,7 +97,7 @@ func Mute(ctx context.Context, userID int64) error {
 
 // Unmute unmutes a user.
 func Unmute(ctx context.Context, userID int64) error {
-	_, err := db.Col("users").UpdateOne(ctx,
+	_, err := db.ColScoped(ctx, "users").UpdateOne(ctx,
 		bson.M{"user_id": userID},
 		bson.M{"$set": bson.M{"is_muted": false}},
 	)
@@ -111,7 +111,7 @@ func GetUsersPage(ctx context.Context, page, perPage int) ([]models.User, error)
 		SetSort(bson.D{{Key: "user_id", Value: 1}}).
 		SetSkip(skip).
 		SetLimit(int64(perPage))
-	cursor, err := db.Col("users").Find(ctx, bson.M{}, opts)
+	cursor, err := db.ColScoped(ctx, "users").Find(ctx, bson.M{}, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -124,12 +124,12 @@ func GetUsersPage(ctx context.Context, page, perPage int) ([]models.User, error)
 
 // GetUsersCount returns total user count.
 func GetUsersCount(ctx context.Context) (int64, error) {
-	return db.Col("users").CountDocuments(ctx, bson.M{})
+	return db.ColScoped(ctx, "users").CountDocuments(ctx, bson.M{})
 }
 
 // GetAllUserIDs returns all user IDs.
 func GetAllUserIDs(ctx context.Context) ([]int64, error) {
-	cursor, err := db.Col("users").Find(ctx, bson.M{}, options.Find().SetProjection(bson.M{"user_id": 1}))
+	cursor, err := db.ColScoped(ctx, "users").Find(ctx, bson.M{}, options.Find().SetProjection(bson.M{"user_id": 1}))
 	if err != nil {
 		return nil, err
 	}

@@ -22,7 +22,7 @@ func CreateShareLink(ctx context.Context, telegramFileID, fileType string, creat
 	}
 	hash := hex.EncodeToString(tokenBytes)
 
-	_, err := db.Col("shared_files").InsertOne(ctx, bson.M{
+	_, err := db.ColScoped(ctx, "shared_files").InsertOne(ctx, bson.M{
 		"share_hash":       hash,
 		"telegram_file_id": telegramFileID,
 		"file_type":        fileType,
@@ -42,11 +42,11 @@ func GetShareLink(ctx context.Context, shareHash string) (string, string, error)
 		FileType       string    `bson:"file_type"`
 		ExpiresAt      time.Time `bson:"expires_at"`
 	}
-	if err := db.Col("shared_files").FindOne(ctx, bson.M{"share_hash": shareHash}).Decode(&doc); err != nil {
+	if err := db.ColScoped(ctx, "shared_files").FindOne(ctx, bson.M{"share_hash": shareHash}).Decode(&doc); err != nil {
 		return "", "", err
 	}
 	if doc.ExpiresAt.Before(time.Now().UTC()) {
-		_, _ = db.Col("shared_files").DeleteOne(ctx, bson.M{"share_hash": shareHash})
+		_, _ = db.ColScoped(ctx, "shared_files").DeleteOne(ctx, bson.M{"share_hash": shareHash})
 		return "", "", nil
 	}
 	return doc.TelegramFileID, doc.FileType, nil

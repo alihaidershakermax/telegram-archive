@@ -19,13 +19,13 @@ func GetWelcomeSettings(ctx context.Context) models.WelcomeSettings {
 	}
 
 	var textRow models.BotSetting
-	err := db.Col("bot_settings").FindOne(ctx, bson.M{"key": "welcome_message"}).Decode(&textRow)
+	err := db.ColScoped(ctx, "bot_settings").FindOne(ctx, bson.M{"key": "welcome_message"}).Decode(&textRow)
 	if err == nil && textRow.Value != "" {
 		settings.Message = textRow.Value
 	}
 
 	var photoRow models.BotSetting
-	err = db.Col("bot_settings").FindOne(ctx, bson.M{"key": "welcome_photo"}).Decode(&photoRow)
+	err = db.ColScoped(ctx, "bot_settings").FindOne(ctx, bson.M{"key": "welcome_photo"}).Decode(&photoRow)
 	if err == nil && photoRow.Value != "" {
 		settings.Photo = photoRow.Value
 	}
@@ -36,7 +36,7 @@ func GetWelcomeSettings(ctx context.Context) models.WelcomeSettings {
 // SetWelcomeMessage updates the welcome message text.
 func SetWelcomeMessage(ctx context.Context, text string) error {
 	opts := options.Update().SetUpsert(true)
-	_, err := db.Col("bot_settings").UpdateOne(ctx,
+	_, err := db.ColScoped(ctx, "bot_settings").UpdateOne(ctx,
 		bson.M{"key": "welcome_message"},
 		bson.M{"$set": bson.M{"value": text}},
 		opts,
@@ -47,7 +47,7 @@ func SetWelcomeMessage(ctx context.Context, text string) error {
 // SetWelcomePhoto updates the welcome photo file ID.
 func SetWelcomePhoto(ctx context.Context, fileID string) error {
 	opts := options.Update().SetUpsert(true)
-	_, err := db.Col("bot_settings").UpdateOne(ctx,
+	_, err := db.ColScoped(ctx, "bot_settings").UpdateOne(ctx,
 		bson.M{"key": "welcome_photo"},
 		bson.M{"$set": bson.M{"value": fileID}},
 		opts,

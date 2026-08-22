@@ -80,3 +80,14 @@ func TestAIRequiresProviderConfiguration(t *testing.T) {
 		t.Fatalf("expected 400, got %d", res.Code)
 	}
 }
+
+func TestArchiveNamespaceRejectsInvalidBotID(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/categories", nil)
+	req.Header.Set("X-API-Key", "secret")
+	req.Header.Set("X-Telegram-Bot-ID", "not-a-number")
+	res := httptest.NewRecorder()
+	testServer().Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid bot namespace, got %d", res.Code)
+	}
+}

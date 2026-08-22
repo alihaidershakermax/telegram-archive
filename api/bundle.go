@@ -46,7 +46,12 @@ func (s *Server) bundle(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "file_ids must contain between 1 and 20 files")
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
+	archiveCtx, err := s.archiveContextFromRequest(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	ctx, cancel := context.WithTimeout(archiveCtx, 90*time.Second)
 	defer cancel()
 	builder := s.bundleBuilder
 	if builder == nil {

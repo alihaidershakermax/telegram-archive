@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"context"
+	"fmt"
 	"log"
 	"strings"
 	"sync"
@@ -15,33 +15,49 @@ import (
 
 // userStates holds per-user conversation state (replaces Python's context.user_data).
 var (
-	userStates   = map[int64]*models.UserState{}
+	userStates   = map[string]*models.UserState{}
 	userStatesMu sync.RWMutex
 )
 
-// GetState returns the user state, creating one if needed.
-func GetState(userID int64) *models.UserState {
+func stateKey(bot *tgbotapi.BotAPI, userID int64) string {
+	botID := int64(0)
+	if bot != nil {
+		botID = bot.Self.ID
+	}
+	return fmt.Sprintf("%d:%d", botID, userID)
+}
+
+// GetState returns the legacy primary-bot state for compatibility.
+func GetState(userID int64) *models.UserState { return GetStateForBot(nil, userID) }
+
+// GetStateForBot keeps conversation state isolated by Telegram bot and user.
+func GetStateForBot(bot *tgbotapi.BotAPI, userID int64) *models.UserState {
+	key := stateKey(bot, userID)
 	userStatesMu.Lock()
 	defer userStatesMu.Unlock()
-	s, ok := userStates[userID]
+	s, ok := userStates[key]
 	if !ok {
 		s = &models.UserState{}
-		userStates[userID] = s
+		userStates[key] = s
 	}
 	return s
 }
 
-// WithState executes fn while holding the per-user state lock.
-func WithState(userID int64, fn func(*models.UserState)) {
-	s := GetState(userID)
+// WithState executes fn while holding the legacy primary-bot state lock.
+func WithState(userID int64, fn func(*models.UserState)) { WithStateForBot(nil, userID, fn) }
+
+func WithStateForBot(bot *tgbotapi.BotAPI, userID int64, fn func(*models.UserState)) {
+	s := GetStateForBot(bot, userID)
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
 	fn(s)
 }
 
-// ClearAwaiting clears the awaiting state for a user.
-func ClearAwaiting(userID int64) {
-	s := GetState(userID)
+// ClearAwaiting clears the legacy primary-bot awaiting state.
+func ClearAwaiting(userID int64) { ClearAwaitingForBot(nil, userID) }
+
+func ClearAwaitingForBot(bot *tgbotapi.BotAPI, userID int64) {
+	s := GetStateForBot(bot, userID)
 	s.Mu.Lock()
 	s.Awaiting = nil
 	s.Mu.Unlock()
@@ -49,7 +65,7 @@ func ClearAwaiting(userID int64) {
 
 // HandleStart handles the /start command.
 func HandleStart(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	user := message.From
 	if user == nil {
 		return
@@ -79,11 +95,12 @@ func HandleStart(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 			bot.Send(msg)
 			return
 		}
+		sender := storageBot(bot)
 		action := tgbotapi.NewChatAction(message.Chat.ID, "upload_document")
 		if fileType == "photo" {
 			action = tgbotapi.NewChatAction(message.Chat.ID, "upload_photo")
 		}
-		bot.Send(action)
+		sender.Send(action)
 		var media tgbotapi.Chattable
 		switch fileType {
 		case "photo":
@@ -97,7 +114,8 @@ func HandleStart(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 			doc.Caption = "📤 الملف المشارك معك"
 			media = doc
 		}
-		if _, err := bot.Send(media); err != nil {
+		if _, err := sender.Send(media); err != nil {
+
 			log.Printf("shared file send failed: %v", err)
 		}
 		return
@@ -147,7 +165,7 @@ func HandleStart(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 
 // HandlePanel handles the /panel command.
 func HandlePanel(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	userID := message.From.ID
 
 	isAdmin, _ := services.IsAdmin(ctx, userID)
@@ -166,7 +184,7 @@ func HandlePanel(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 
 // HandleBroadcastCommand handles the /broadcast command.
 func HandleBroadcastCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	userID := message.From.ID
 
 	allowed, _ := services.Can(ctx, userID, "broadcast")
@@ -205,7 +223,7 @@ func HandleBroadcastCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 
 // HandleBanCommand handles the /ban command.
 func HandleBanCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	userID := message.From.ID
 
 	allowed, _ := services.Can(ctx, userID, "manage_users")
@@ -248,7 +266,7 @@ func HandleBanCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 
 // HandleUnbanCommand handles the /unban command.
 func HandleUnbanCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	userID := message.From.ID
 
 	allowed, _ := services.Can(ctx, userID, "manage_users")
@@ -290,9 +308,9 @@ func HandleUnbanCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 
 // HandleTextMessage handles text messages based on user's awaiting state.
 func HandleTextMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	userID := message.From.ID
-	state := GetState(userID)
+	state := GetStateForBot(bot, userID)
 	state.Mu.Lock()
 	awaiting := state.Awaiting
 	if awaiting != nil {
@@ -324,7 +342,7 @@ func HandleTextMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 			msg := tgbotapi.NewMessage(message.Chat.ID, "✅ تم إنشاء التصنيف: "+text)
 			bot.Send(msg)
 		}
-		ClearAwaiting(userID)
+		ClearAwaitingForBot(bot, userID)
 
 	case "new_sub":
 		catID := awaiting.CatID
@@ -338,12 +356,12 @@ func HandleTextMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 			msg := tgbotapi.NewMessage(message.Chat.ID, "✅ تم إنشاء المادة: "+text)
 			bot.Send(msg)
 		}
-		ClearAwaiting(userID)
+		ClearAwaitingForBot(bot, userID)
 
 	case "broadcast":
 		allowed, _ := services.Can(ctx, userID, "broadcast")
 		if !allowed {
-			ClearAwaiting(userID)
+			ClearAwaitingForBot(bot, userID)
 			return
 		}
 		delay := services.GetBroadcastDelay()
@@ -357,12 +375,12 @@ func HandleTextMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 			"✅ تم الإرسال بنجاح إلى "+itoa(result.Success)+" مستخدم.\n❌ فشل الإرسال إلى "+itoa(result.Failed)+" مستخدم.",
 		)
 		bot.Send(msg)
-		ClearAwaiting(userID)
+		ClearAwaitingForBot(bot, userID)
 
 	case "add_admin":
 		allowed, _ := services.Can(ctx, userID, "manage_admins")
 		if !allowed {
-			ClearAwaiting(userID)
+			ClearAwaitingForBot(bot, userID)
 			return
 		}
 		uid := parseInt64(text)
@@ -385,7 +403,7 @@ func HandleTextMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 			msg := tgbotapi.NewMessage(message.Chat.ID, "✅ تم إضافة الأدمن: "+itoa64(uid))
 			bot.Send(msg)
 		}
-		ClearAwaiting(userID)
+		ClearAwaitingForBot(bot, userID)
 
 	case "welcome_text":
 		err := services.SetWelcomeMessage(ctx, text)
@@ -397,7 +415,7 @@ func HandleTextMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 			msg := tgbotapi.NewMessage(message.Chat.ID, "✅ تم تحديث نص رسالة الترحيب.")
 			bot.Send(msg)
 		}
-		ClearAwaiting(userID)
+		ClearAwaitingForBot(bot, userID)
 
 	default:
 		// unknown or "upload" — don't clear
@@ -407,9 +425,9 @@ func HandleTextMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 
 // HandleFileUpload handles file/media uploads from admins.
 func HandleFileUpload(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
-	ctx := context.Background()
+	ctx := archiveContext(bot)
 	userID := message.From.ID
-	state := GetState(userID)
+	state := GetStateForBot(bot, userID)
 
 	// Handle welcome photo upload
 	state.Mu.Lock()
@@ -427,7 +445,7 @@ func HandleFileUpload(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 			largest := message.Photo[len(message.Photo)-1]
 			_ = services.SetWelcomePhoto(ctx, largest.FileID)
 			services.LogAdminAction(ctx, userID, "set_welcome", map[string]interface{}{"text": nil, "photo": true})
-			ClearAwaiting(userID)
+			ClearAwaitingForBot(bot, userID)
 			msg := tgbotapi.NewMessage(message.Chat.ID, "✅ تم تحديث صورة الترحيب.")
 			bot.Send(msg)
 		}

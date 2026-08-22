@@ -12,7 +12,7 @@ import (
 // RateFile sets or updates a user's rating for a file.
 func RateFile(ctx context.Context, userID int64, fileID, stars int) error {
 	opts := options.Update().SetUpsert(true)
-	_, err := db.Col("file_ratings").UpdateOne(ctx,
+	_, err := db.ColScoped(ctx, "file_ratings").UpdateOne(ctx,
 		bson.M{"user_id": userID, "file_id": fileID},
 		bson.M{"$set": bson.M{"user_id": userID, "file_id": fileID, "stars": stars}},
 		opts,
@@ -28,7 +28,7 @@ type FileRatingResult struct {
 
 // GetFileRating returns the average rating for a file.
 func GetFileRating(ctx context.Context, fileID int) (FileRatingResult, error) {
-	cursor, err := db.Col("file_ratings").Find(ctx, bson.M{"file_id": fileID})
+	cursor, err := db.ColScoped(ctx, "file_ratings").Find(ctx, bson.M{"file_id": fileID})
 	if err != nil {
 		return FileRatingResult{}, err
 	}
@@ -56,7 +56,7 @@ func GetUserRating(ctx context.Context, userID int64, fileID int) (int, error) {
 	var row struct {
 		Stars int `bson:"stars"`
 	}
-	err := db.Col("file_ratings").FindOne(ctx, bson.M{"user_id": userID, "file_id": fileID}).Decode(&row)
+	err := db.ColScoped(ctx, "file_ratings").FindOne(ctx, bson.M{"user_id": userID, "file_id": fileID}).Decode(&row)
 	if err != nil {
 		return 0, err
 	}

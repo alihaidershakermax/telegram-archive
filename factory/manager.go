@@ -139,19 +139,25 @@ func (m *Manager) Register(ctx context.Context, ownerID int64, token string) (*m
 		return nil, err
 	}
 	now := time.Now().UTC()
+	namespace, folder := botNamespace(bot.Self.UserName, bot.Self.ID)
 	record := models.ManagedBot{
-		ID:              newID(),
-		OwnerID:         ownerID,
-		TokenCiphertext: ciphertext,
-		TokenNonce:      nonce,
-		TokenHash:       hash,
-		TelegramBotID:   bot.Self.ID,
-		Username:        bot.Self.UserName,
-		FirstName:       bot.Self.FirstName,
-		Status:          models.ManagedBotActive,
-		CreatedAt:       now,
-		UpdatedAt:       now,
-		LastSeenAt:      now,
+
+		ID:               newID(),
+		OwnerID:          ownerID,
+		TokenCiphertext:  ciphertext,
+		TokenNonce:       nonce,
+		TokenHash:        hash,
+		TelegramBotID:    bot.Self.ID,
+		Username:         bot.Self.UserName,
+		FirstName:        bot.Self.FirstName,
+		DatabaseName:     namespace,
+		StorageFolder:    folder,
+		StorageChannelID: m.cfg.ArchiveChannelID,
+		Status:           models.ManagedBotActive,
+
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		LastSeenAt: now,
 	}
 	if _, err := db.Col("managed_bots").InsertOne(ctx, record); err != nil {
 		return nil, err
@@ -161,6 +167,24 @@ func (m *Manager) Register(ctx context.Context, ownerID int64, token string) (*m
 		return nil, err
 	}
 	return &record, nil
+}
+
+func botNamespace(username string, telegramID int64) (string, string) {
+	clean := strings.ToLower(strings.TrimSpace(username))
+	if clean == "" {
+		clean = "bot"
+	}
+	var safe strings.Builder
+	for _, r := range clean {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' {
+			safe.WriteRune(r)
+		}
+	}
+	if safe.Len() == 0 {
+		safe.WriteString("bot")
+	}
+	name := fmt.Sprintf("%s_%d", safe.String(), telegramID)
+	return fmt.Sprintf("archive_bot_%d", telegramID), "bots/" + name + "/"
 }
 
 // List returns metadata and live metrics, never token material.
@@ -289,6 +313,17 @@ func (m *Manager) startRecord(ctx context.Context, record models.ManagedBot) err
 	if err != nil {
 		return err
 	}
+	if record.DatabaseName == "" || record.StorageFolder == "" || record.StorageChannelID == 0 {
+		databaseName, storageFolder := botNamespace(bot.Self.UserName, bot.Self.ID)
+		record.DatabaseName = databaseName
+		record.StorageFolder = storageFolder
+		record.StorageChannelID = m.cfg.ArchiveChannelID
+		_, _ = db.Col("managed_bots").UpdateOne(ctx, bson.M{"_id": record.ID}, bson.M{"$set": bson.M{
+			"database_name":      databaseName,
+			"storage_folder":     storageFolder,
+			"storage_channel_id": m.cfg.ArchiveChannelID,
+		}})
+	}
 	return m.startWorker(record, bot)
 }
 
@@ -303,6 +338,7 @@ func (m *Manager) startWorker(record models.ManagedBot, bot *tgbotapi.BotAPI) er
 	m.workers[record.ID] = worker
 	m.mu.Unlock()
 
+	go db.EnsureIndexesForContext(db.WithBotDatabase(context.Background(), record.TelegramBotID))
 	go m.poll(record.ID, worker)
 	go m.health(record.ID, worker)
 	return nil

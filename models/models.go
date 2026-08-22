@@ -86,6 +86,9 @@ type ManagedBot struct {
 	TelegramBotID     int64     `bson:"telegram_bot_id" json:"telegram_bot_id"`
 	Username          string    `bson:"username" json:"username"`
 	FirstName         string    `bson:"first_name,omitempty" json:"first_name,omitempty"`
+	DatabaseName      string    `bson:"database_name" json:"database_name"`
+	StorageFolder     string    `bson:"storage_folder" json:"storage_folder"`
+	StorageChannelID  int64     `bson:"storage_channel_id" json:"storage_channel_id"`
 	Status            string    `bson:"status" json:"status"`
 	CreatedAt         time.Time `bson:"created_at" json:"created_at"`
 	UpdatedAt         time.Time `bson:"updated_at" json:"updated_at"`

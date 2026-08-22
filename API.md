@@ -34,6 +34,18 @@ Responses use the following envelope:
 {"data": []}
 ```
 
+## Bot-specific archive namespaces
+
+The archive endpoints use the primary database by default. To read a managed bot archive, send the registered Telegram bot ID in `X-Telegram-Bot-ID`; the server verifies that the bot exists before selecting its isolated MongoDB database. The same header applies to `/api/v1/categories`, `/api/v1/subjects`, `/api/v1/files`, and `/api/v1/bundle`.
+
+```bash
+curl -H "X-API-Key: $API_KEY" \
+  -H "X-Telegram-Bot-ID: 123456789" \
+  http://localhost:8000/api/v1/categories
+```
+
+The primary bot is the sole Storage Gateway for the shared Telegram channel. Managed bots do not need to be channel administrators. Uploads received by a managed bot are transferred through that bot and re-uploaded by the primary bot; the database stores the primary bot's returned `file_id`. Downloads and shared-file delivery likewise use the primary bot, because Telegram file IDs are bot-specific.
+
 ## AI Gateway
 
 The gateway forwards requests to an OpenAI-compatible provider configured with `AI_BASE_URL`, `AI_API_KEY`, and `AI_MODEL`. The server never exposes the upstream provider key to callers.
