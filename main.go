@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -100,10 +101,56 @@ func main() {
 		log.Printf("Warning: failed to set bot commands: %v", errCmd)
 	}
 
-	// Start polling
+	// Start polling. When Bot Factory is enabled, reserve the parent update stream
+	// so a second service instance stays healthy without competing for getUpdates.
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 30
-	updates := bot.GetUpdatesChan(u)
+	var updates tgbotapi.UpdatesChannel
+	var idleUpdates chan tgbotapi.Update
+	var parentLeaseStop chan struct{}
+	var parentStopOnce sync.Once
+	stopParentPolling := func() { parentStopOnce.Do(func() { bot.StopReceivingUpdates() }) }
+	parentLeaseHeld := false
+	parentPollingStarted := false
+	if factoryManager != nil {
+		leaseCtx, cancelLease := context.WithTimeout(context.Background(), 10*time.Second)
+		parentLeaseHeld = factoryManager.AcquirePrimaryLease(leaseCtx, bot.Self.ID)
+		cancelLease()
+		if parentLeaseHeld {
+			if _, err := bot.Request(tgbotapi.DeleteWebhookConfig{DropPendingUpdates: false}); err != nil {
+				log.Printf("parent bot webhook cleanup failed: %v", err)
+			}
+			updates = bot.GetUpdatesChan(u)
+			parentPollingStarted = true
+			parentLeaseStop = make(chan struct{})
+			go func() {
+				ticker := time.NewTicker(30 * time.Second)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-parentLeaseStop:
+						return
+					case <-ticker.C:
+						renewCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+						ok := factoryManager.RenewPrimaryLease(renewCtx, bot.Self.ID)
+						cancel()
+						if !ok {
+							log.Printf("parent bot %d polling lease lost; stopping polling", bot.Self.ID)
+							stopParentPolling()
+							return
+						}
+					}
+				}
+			}()
+		} else {
+			log.Printf("parent bot %d polling disabled: another instance owns its lease", bot.Self.ID)
+			idleUpdates = make(chan tgbotapi.Update)
+			updates = idleUpdates
+		}
+	} else {
+		updates = bot.GetUpdatesChan(u)
+		parentPollingStarted = true
+	}
 
 	// Start HTTP health check server for cloud platforms (Render, Koyeb, Railway, etc.)
 	port := os.Getenv("PORT")
@@ -127,8 +174,21 @@ func main() {
 	go func() {
 		<-signals
 		log.Println("Shutdown signal received; stopping Telegram polling and managed workers...")
-		bot.StopReceivingUpdates()
+		if parentPollingStarted {
+			stopParentPolling()
+			if parentLeaseStop != nil {
+
+				close(parentLeaseStop)
+			}
+			if parentLeaseHeld && factoryManager != nil {
+				factoryManager.ReleasePrimaryLease(context.Background(), bot.Self.ID)
+			}
+		} else if idleUpdates != nil {
+
+			close(idleUpdates)
+		}
 		queueCancel()
+
 		if expansionController != nil {
 			expansionController.Stop()
 		}

@@ -148,3 +148,6 @@
 - [x] إضافة اختبارات وتوثيق ومزامنة المستودع الثانوي
 
 - [x] إضافة أمر `/id` لتسهيل أخذ Telegram user ID عند تسليم البوت
+
+- [x] منع تشغيل polling متزامن لنفس Telegram bot عبر أكثر من instance باستخدام distributed lease
+- [x] جعل health check لا يفتح اتصالاً متعارضاً مع polling وإضافة تشخيص واضح لـ 409 Conflict

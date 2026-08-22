@@ -41,18 +41,20 @@ type workerStats struct {
 }
 
 type managedWorker struct {
-	bot    *tgbotapi.BotAPI
-	stop   chan struct{}
-	stats  *workerStats
-	once   sync.Once
-	closed chan struct{}
+	bot         *tgbotapi.BotAPI
+	stop        chan struct{}
+	stats       *workerStats
+	once        sync.Once
+	updatesOnce sync.Once
+	closed      chan struct{}
 }
 
 // Manager owns the lifecycle and routing policy for all managed bots.
 type Manager struct {
-	cfg     *config.Config
-	cipher  *TokenCipher
-	handler func(*tgbotapi.BotAPI, tgbotapi.Update)
+	cfg        *config.Config
+	cipher     *TokenCipher
+	handler    func(*tgbotapi.BotAPI, tgbotapi.Update)
+	instanceID string
 
 	mu      sync.RWMutex
 	workers map[string]*managedWorker
@@ -77,7 +79,7 @@ func NewManager(cfg *config.Config, handler func(*tgbotapi.BotAPI, tgbotapi.Upda
 	if workers <= 0 {
 		cfg.FactoryWorkers = 8
 	}
-	return &Manager{cfg: cfg, cipher: cipher, handler: handler, workers: make(map[string]*managedWorker), slots: make(chan struct{}, cfg.FactoryWorkers)}, nil
+	return &Manager{cfg: cfg, cipher: cipher, handler: handler, instanceID: newID(), workers: make(map[string]*managedWorker), slots: make(chan struct{}, cfg.FactoryWorkers)}, nil
 }
 
 // LoadAndStart restores active managed bots after a process restart.
@@ -470,7 +472,6 @@ func (m *Manager) startWorker(record models.ManagedBot, bot *tgbotapi.BotAPI) er
 	}
 	worker := &managedWorker{bot: bot, stop: make(chan struct{}), stats: &workerStats{}, closed: make(chan struct{})}
 	worker.stats.lastSeenUnix.Store(time.Now().Unix())
-	configureManagedBotCommands(bot)
 	m.mu.Lock()
 	if old := m.workers[record.ID]; old != nil {
 		m.mu.Unlock()
@@ -481,37 +482,80 @@ func (m *Manager) startWorker(record models.ManagedBot, bot *tgbotapi.BotAPI) er
 
 	go db.EnsureIndexesForContext(db.WithBotDatabase(context.Background(), record.TelegramBotID))
 	go m.poll(record.ID, worker)
-	go m.health(record.ID, worker)
 	return nil
 }
 
 func (m *Manager) poll(id string, worker *managedWorker) {
 	defer close(worker.closed)
+	leaseCtx, cancelLease := context.WithTimeout(context.Background(), 10*time.Second)
+	claimed := m.acquireWorkerLease(leaseCtx, id, worker.bot.Self.ID)
+	cancelLease()
+	if !claimed {
+		log.Printf("managed bot %s skipped: another instance owns its polling lease", id)
+		m.removeWorker(id, worker)
+		return
+	}
+	defer m.releaseWorkerLease(context.Background(), id)
+
 	if _, err := worker.bot.Request(tgbotapi.DeleteWebhookConfig{DropPendingUpdates: false}); err != nil {
 		log.Printf("managed bot %d webhook cleanup failed: %v", worker.bot.Self.ID, err)
 	}
+	configureManagedBotCommands(worker.bot)
+	go m.health(id, worker)
 	updateConfig := tgbotapi.NewUpdate(0)
 	updateConfig.Timeout = 30
 	updates := worker.bot.GetUpdatesChan(updateConfig)
-	for update := range updates {
-		started := time.Now()
-		worker.stats.activeRequests.Add(1)
-		worker.stats.totalUpdates.Add(1)
-		worker.stats.lastSeenUnix.Store(time.Now().Unix())
-		if m.handler != nil {
-			func() {
-				defer func() {
-					if recovered := recover(); recovered != nil {
-						worker.stats.totalErrors.Add(1)
-						worker.stats.consecutive.Add(1)
-						log.Printf("managed bot %s update panic: %v", id, recovered)
-					}
-				}()
-				m.handler(worker.bot, update)
-			}()
+	leaseLost := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(workerLeaseRenewal)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-worker.stop:
+				return
+			case <-ticker.C:
+				renewCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				ok := m.renewWorkerLease(renewCtx, id)
+				cancel()
+				if !ok {
+					close(leaseLost)
+					return
+				}
+			}
 		}
-		worker.stats.lastLatencyNS.Store(time.Since(started).Nanoseconds())
-		worker.stats.activeRequests.Add(-1)
+	}()
+
+	for {
+		select {
+		case <-worker.stop:
+			return
+		case <-leaseLost:
+			log.Printf("managed bot %s polling lease lost; stopping worker", id)
+			worker.shutdown()
+			return
+		case update, ok := <-updates:
+			if !ok {
+				return
+			}
+			started := time.Now()
+			worker.stats.activeRequests.Add(1)
+			worker.stats.totalUpdates.Add(1)
+			worker.stats.lastSeenUnix.Store(time.Now().Unix())
+			if m.handler != nil {
+				func() {
+					defer func() {
+						if recovered := recover(); recovered != nil {
+							worker.stats.totalErrors.Add(1)
+							worker.stats.consecutive.Add(1)
+							log.Printf("managed bot %s update panic: %v", id, recovered)
+						}
+					}()
+					m.handler(worker.bot, update)
+				}()
+			}
+			worker.stats.lastLatencyNS.Store(time.Since(started).Nanoseconds())
+			worker.stats.activeRequests.Add(-1)
+		}
 	}
 }
 
@@ -543,6 +587,31 @@ func (m *Manager) health(id string, worker *managedWorker) {
 	}
 }
 
+func (worker *managedWorker) shutdown() {
+	if worker == nil {
+		return
+	}
+	worker.once.Do(func() {
+		close(worker.stop)
+		worker.stopUpdates()
+	})
+}
+
+func (worker *managedWorker) stopUpdates() {
+	if worker == nil || worker.bot == nil {
+		return
+	}
+	worker.updatesOnce.Do(func() { worker.bot.StopReceivingUpdates() })
+}
+
+func (m *Manager) removeWorker(id string, target *managedWorker) {
+	m.mu.Lock()
+	if m.workers[id] == target {
+		delete(m.workers, id)
+	}
+	m.mu.Unlock()
+}
+
 func (m *Manager) stopWorker(id string) {
 	m.mu.Lock()
 	worker := m.workers[id]
@@ -551,10 +620,7 @@ func (m *Manager) stopWorker(id string) {
 	if worker == nil {
 		return
 	}
-	worker.once.Do(func() {
-		close(worker.stop)
-		worker.bot.StopReceivingUpdates()
-	})
+	worker.shutdown()
 	select {
 	case <-worker.closed:
 	case <-time.After(5 * time.Second):
