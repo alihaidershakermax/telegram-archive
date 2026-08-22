@@ -7,7 +7,6 @@ import (
 
 	"telegram-archive-bot/config"
 	"telegram-archive-bot/models"
-	"telegram-archive-bot/utils"
 )
 
 // FilesKeyboard returns the inline keyboard for browsing files in a subject.
@@ -35,12 +34,6 @@ func FileActionsKeyboard(fileID int, backData, fileType, name string) tgbotapi.I
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
 		tgbotapi.NewInlineKeyboardButtonData("📥 تحميل", fmt.Sprintf("download_%d", fileID)),
 	))
-
-	if utils.IsImageFile(fileType, name) || utils.IsPDFFile(fileType, name) {
-		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("🖼 تحميل كصورة", fmt.Sprintf("dlimg_%d", fileID)),
-		))
-	}
 
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
 		tgbotapi.NewInlineKeyboardButtonData("📤 مشاركة", fmt.Sprintf("share_%d", fileID)),

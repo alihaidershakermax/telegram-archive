@@ -61,16 +61,6 @@ func HandleCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 	case data == "view_archive" || data == "back_cats":
 		showCategories(bot, chatID, msgID, hasPhoto)
 
-	case data == "search_start":
-		WithState(userID, func(state *models.UserState) {
-			state.Awaiting = &models.AwaitingState{Type: "search"}
-		})
-		utils.EditOrSend(bot, query.ID, chatID, msgID, "🔎 أرسل كلمة أو عبارة للبحث المتقدم.\nمثال: تشريح النوع:pdf الترتيب:الأكثر_تنزيلاً", nil, hasPhoto)
-
-	case strings.HasPrefix(data, "search_page_"):
-		page := parseID(data, "search_page_")
-		showSearchPage(bot, query, page)
-
 	case strings.HasPrefix(data, "cat_"):
 		catID := parseID(data, "cat_")
 		showSubjects(bot, chatID, msgID, catID, hasPhoto)
@@ -93,11 +83,7 @@ func HandleCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 
 	case strings.HasPrefix(data, "download_"):
 		fileID := parseID(data, "download_")
-		downloadFileImage(bot, query, fileID)
-
-	case strings.HasPrefix(data, "dlimg_"):
-		fileID := parseID(data, "dlimg_")
-		downloadFileImage(bot, query, fileID)
+		downloadFileAsDocument(bot, query, fileID)
 
 	case strings.HasPrefix(data, "share_"):
 		fileID := parseID(data, "share_")
@@ -485,27 +471,9 @@ func downloadFile(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, fileID in
 	bot.Send(doc)
 }
 
-func downloadFileImage(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, fileID int) {
-	ctx := context.Background()
-	f, err := services.GetFileRow(ctx, fileID)
-	if err != nil {
-		return
-	}
-	services.IncrementDownloads(ctx, fileID)
-
-	if utils.IsImageFile(f.FileType, f.Name) {
-		action := tgbotapi.NewChatAction(query.Message.Chat.ID, "upload_photo")
-		bot.Send(action)
-		photo := tgbotapi.NewPhoto(query.Message.Chat.ID, tgbotapi.FileID(f.TelegramFileID))
-		photo.Caption = f.Name
-		bot.Send(photo)
-	} else {
-		action := tgbotapi.NewChatAction(query.Message.Chat.ID, "upload_document")
-		bot.Send(action)
-		doc := tgbotapi.NewDocument(query.Message.Chat.ID, tgbotapi.FileID(f.TelegramFileID))
-		doc.Caption = fmt.Sprintf("📄 %s\n✨ تم إرسال الملف كمستند لقراءته بدقة عالية.", f.Name)
-		bot.Send(doc)
-	}
+func downloadFileAsDocument(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, fileID int) {
+	// Every archive download is delivered as a document, including image files.
+	downloadFile(bot, query, fileID)
 }
 
 func shareFile(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, fileID int, hasPhoto bool) {

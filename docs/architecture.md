@@ -2,7 +2,7 @@
 
 ## Overview
 
-Telegram Archive Bot is a single Go service that combines Telegram update polling with an authenticated HTTP API. The design keeps delivery inside Telegram while isolating business logic into archive, administration, AI, sharing, broadcast, and search services.
+Telegram Archive Bot is a single Go service that combines Telegram update polling with an authenticated HTTP API. The design keeps delivery inside Telegram while isolating business logic into archive, administration, AI, sharing, and broadcast services.
 
 ![Telegram Archive Bot architecture](./architecture.png)
 
@@ -32,18 +32,15 @@ A user sends a command or presses an inline button. The router delegates the eve
 
 An authorized API client submits file IDs and a Telegram user ID. The API validates the API key and request limits, the bundle service reads the selected archive records, downloads each Telegram file with bounded context, creates a ZIP in temporary storage, and sends the resulting document to the target user.
 
-### Advanced search
-
-The user sends `/search` and enters a phrase with optional filters. The search service escapes the query, applies category, subject, type, and date constraints, sorts server-side, and returns a bounded page of results. Telegram and HTTP API clients use the same search contract.
-
 ### AI request
 
 A user invokes `/ai` or `/summarize`, or an external client calls the AI API. The gateway validates the request, applies a timeout and rate limit, sends the request to the configured OpenAI-compatible provider, and returns a safe response without forwarding internal errors or provider secrets.
 
 ## Security boundaries
 
-API routes require an API key and rate limiting. Administrator actions require explicit permissions rather than only a generic administrator flag. Share links use random expiring tokens. Search input is escaped and bounded, filter values are allowlisted, pagination is capped, and query execution is server-side. Temporary files used for ZIP bundling are size-capped, time-bounded, and removed after processing.
+API routes require an API key and rate limiting. Administrator actions require explicit permissions rather than only a generic administrator flag. Share links use random expiring tokens. Temporary files used for ZIP bundling are size-capped, time-bounded, and removed after processing.
 
 ## Scaling path
 
-The current single-process architecture is appropriate for a small and medium archive. Before processing large media volumes, move bundle creation and expensive search workloads behind a durable queue, store job status in MongoDB, and expose progress updates through Telegram. Broadcast delivery can similarly move to a rate-limited worker with retries. MongoDB transactions or soft-delete workflows should be introduced when content deletion becomes business-critical.
+The current single-process architecture is appropriate for a small and medium archive. Before processing large media volumes, move bundle creation behind a durable queue, store job status in MongoDB, and expose progress updates through Telegram. Broadcast delivery can similarly move to a rate-limited worker with retries.
+MongoDB transactions or soft-delete workflows should be introduced when content deletion becomes business-critical.

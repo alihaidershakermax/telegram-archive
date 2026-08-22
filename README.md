@@ -16,7 +16,6 @@ The project uses a focused visual system built around deep navy, cyan, and amber
 |---|---|
 | [Repository preview](assets/branding/telegram-archive-repository-preview.png) | GitHub repository header and project overview |
 | [Project logo](assets/branding/telegram-archive-logo.png) | Main repository and bot identity |
-| [Advanced Search icon](assets/branding/telegram-archive-search-icon.png) | Search feature and documentation callouts |
 | [Secure API + AI icon](assets/branding/telegram-archive-api-icon.png) | API and AI gateway materials |
 | [Instagram post](assets/branding/telegram-archive-instagram-post.png) | Ready-to-publish project announcement |
 
@@ -25,12 +24,11 @@ The project uses a focused visual system built around deep navy, cyan, and amber
 | Area | Capability |
 |---|---|
 | Archive | Categories, subjects, ordered files, metadata, download counters |
-| Delivery | Photos are sent as Telegram photos; documents, video, audio, voice, animations, and other media retain suitable delivery types |
+| Delivery | All archived media, including images, is sent as a Telegram document to preserve the original file |
 | Administration | Role-based permissions, content management, user moderation, maintenance mode, welcome settings, audit logs |
 | Sharing | Expiring deep links backed by cryptographically random tokens |
 | API | API-key authentication, rate limiting, archive reads, bundle delivery, and AI routes |
 | AI | OpenAI-compatible chat and summarization gateway plus `/ai` and `/summarize` bot commands |
-| Search | Advanced metadata search with filters, sorting, pagination, and Telegram/API access |
 | Operations | Health endpoint, Docker image, Compose configuration, request IDs, race-detector coverage |
 
 ## Architecture
@@ -49,7 +47,6 @@ Telegram Updates
       |                 |
       |                 +--------> Telegram Bot API
       |
-      +---- /search --> advanced archive search
 
 HTTP clients ---> authenticated API ---> archive / bundle / AI services
 ```
@@ -84,8 +81,8 @@ Copy `.env.example` to `.env` for local development. Never commit `.env` or real
 ## Local development
 
 ```bash
-git clone https://github.com/alihaidershakermax/telegram-archive-bot-py.git
-cd telegram-archive-bot-py
+git clone https://github.com/alihaidershakermax/telegram-archive-bot.git
+cd telegram-archive-bot
 cp .env.example .env
 # edit .env with real values
 go mod download
@@ -109,18 +106,6 @@ The health endpoint is available at `GET /api/v1/health`. A successful response 
 | `/unban <id>` | Remove a user ban when authorized |
 | `/ai <question>` | Ask the configured AI gateway |
 | `/summarize <text>` | Summarize text through the configured AI gateway |
-| `/search` | Search the archive with advanced filters |
-
-### Advanced search
-
-Use `/search` and send a phrase with optional filters. Search terms are matched against file names, file types, and subject names. Results are paginated and can be sorted by newest, oldest, download count, or name.
-
-```text
-/search
-تشريح النوع:pdf الترتيب:الأكثر_تنزيلاً
-```
-
-The API exposes the same capability through `GET /api/v1/search`. Supported query parameters include `q`, `category_id`, `subject_id`, `file_type`, `from`, `to`, `sort`, `page`, and `limit`.
 
 ## HTTP API
 
@@ -131,7 +116,6 @@ GET  /api/v1/health
 GET  /api/v1/categories
 GET  /api/v1/subjects?category_id=1
 GET  /api/v1/files?subject_id=1
-GET  /api/v1/search?q=تشريح&file_type=pdf&sort=downloads&page=0&limit=10
 POST /api/v1/bundle
 POST /api/v1/ai/chat
 POST /api/v1/ai/summarize
@@ -166,7 +150,7 @@ The process listens on the platform-provided `PORT`. Do not hardcode a productio
 
 ## Security and reliability
 
-The API uses constant-time API-key comparison and per-key rate limiting. Share tokens use random values and expire. Search uses escaped regular expressions, bounded pagination, validated filters, and server-side sorting. Administration routes apply permission checks before content, user, broadcast, or settings operations.
+The API uses constant-time API-key comparison and per-key rate limiting. Share tokens use random values and expire. Administration routes apply permission checks before content, user, broadcast, or settings operations.
 
 Telegram and MongoDB errors should be logged server-side with context while user-facing messages remain generic. The repository includes race-detector and static-analysis checks for the main packages.
 
@@ -191,16 +175,16 @@ api/       Authenticated HTTP API and bundle delivery
 ai/        OpenAI-compatible gateway
 config/    Environment configuration
 db/        MongoDB connection, indexes, and counters
-handlers/  Telegram commands, callbacks, uploads, AI, and advanced search
+handlers/  Telegram commands, callbacks, uploads, and AI
 keyboards/ Inline Telegram keyboards
 models/    MongoDB and in-memory state models
-services/  Archive, users, admins, sharing, broadcast, rating, and search
+services/  Archive, users, admins, sharing, broadcast, and rating
 utils/     File classification and Telegram message helpers
 ```
 
 ## Operational notes
 
-The bot must be an administrator in the archive channel with permission to post media. MongoDB should use indexes for file name, type, subject, upload date, and download count as the archive grows. Search pagination remains bounded to protect the bot and API under load.
+The bot must be an administrator in the archive channel with permission to post media. Archive downloads are always sent as Telegram documents so image files preserve their original downloadable form. MongoDB should use indexes for file name, subject, upload date, and download count as the archive grows.
 
 ## License
 

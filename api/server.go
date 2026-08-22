@@ -61,7 +61,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/categories", s.withAuth(s.categories))
 	mux.HandleFunc("/api/v1/subjects", s.withAuth(s.subjects))
 	mux.HandleFunc("/api/v1/files", s.withAuth(s.files))
-	mux.HandleFunc("/api/v1/search", s.withAuth(s.search))
 	mux.HandleFunc("/api/v1/bundle", s.withAuth(s.bundle))
 	mux.HandleFunc("/api/v1/ai/chat", s.withAuth(s.aiChat))
 	mux.HandleFunc("/api/v1/ai/summarize", s.withAuth(s.aiSummarize))
@@ -148,49 +147,6 @@ func (s *Server) subjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"data": rows})
-}
-
-func (s *Server) search(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-	query := strings.TrimSpace(r.URL.Query().Get("q"))
-	params := services.FileSearchParams{Query: query, FileType: strings.TrimSpace(r.URL.Query().Get("file_type")), Sort: r.URL.Query().Get("sort")}
-	params.SubjectID, _ = strconv.Atoi(r.URL.Query().Get("subject_id"))
-	params.CategoryID, _ = strconv.Atoi(r.URL.Query().Get("category_id"))
-	params.Page, _ = strconv.Atoi(r.URL.Query().Get("page"))
-	params.Limit, _ = strconv.Atoi(r.URL.Query().Get("limit"))
-	if params.Page < 0 || params.Limit < 0 || params.Limit > 20 {
-		writeError(w, http.StatusBadRequest, "invalid pagination")
-		return
-	}
-	if value := r.URL.Query().Get("from"); value != "" {
-		parsed, err := time.Parse("2006-01-02", value)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "from must use YYYY-MM-DD")
-			return
-		}
-		params.From = parsed
-	}
-	if value := r.URL.Query().Get("to"); value != "" {
-		parsed, err := time.Parse("2006-01-02", value)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "to must use YYYY-MM-DD")
-			return
-		}
-		params.To = parsed.Add(24*time.Hour - time.Nanosecond)
-	}
-	if params.Query == "" && params.FileType == "" && params.SubjectID <= 0 && params.CategoryID <= 0 {
-		writeError(w, http.StatusBadRequest, "q or a search filter is required")
-		return
-	}
-	result, err := services.SearchFiles(r.Context(), params)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to search files")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"data": result.Files, "total": result.Total, "page": result.Page, "limit": result.Limit})
 }
 
 func (s *Server) files(w http.ResponseWriter, r *http.Request) {

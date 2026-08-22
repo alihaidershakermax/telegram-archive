@@ -125,11 +125,10 @@ type UserState struct {
 	UploadLoc         *UploadLocation
 	UsersPage         int
 	UploadTimerActive bool
-	SearchQuery       string
 }
 
 // AwaitingState tracks what the bot is waiting for from a user.
 type AwaitingState struct {
-	Type  string // "new_cat", "new_sub", "broadcast", "add_admin", "welcome_text", "welcome_photo", "upload", "search", "search_result"
+	Type  string // "new_cat", "new_sub", "broadcast", "add_admin", "welcome_text", "welcome_photo", "upload"
 	CatID int    // used for "new_sub"
 }

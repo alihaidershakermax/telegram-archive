@@ -84,6 +84,7 @@ func Load() {
 		log.Println("Warning: .env file not found, using system env vars")
 	}
 
+
 	Cfg = &Config{
 		BotToken:                getEnvRequired("BOT_TOKEN"),
 		OwnerID:                 getEnvInt64Required("OWNER_ID"),

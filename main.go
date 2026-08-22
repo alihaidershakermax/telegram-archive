@@ -44,7 +44,6 @@ func main() {
 		{Command: "unban", Description: "✅ إلغاء حظر (للمشرفين)"},
 		{Command: "ai", Description: "🤖 اسأل المساعد الذكي"},
 		{Command: "summarize", Description: "📝 تلخيص نص"},
-		{Command: "search", Description: "🔎 بحث متقدم في الأرشيف"},
 	}
 	_, errCmd := bot.Request(tgbotapi.NewSetMyCommands(botCmds...))
 	if errCmd != nil {
@@ -113,8 +112,6 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 			handlers.HandleAICommand(bot, msg, false)
 		case "summarize":
 			handlers.HandleAICommand(bot, msg, true)
-		case "search":
-			handlers.HandleSearchCommand(bot, msg)
 
 		}
 		return

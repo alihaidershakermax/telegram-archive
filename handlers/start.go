@@ -387,10 +387,6 @@ func HandleTextMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 		}
 		ClearAwaiting(userID)
 
-	case "search":
-		HandleSearchText(bot, message, text)
-		return
-
 	case "welcome_text":
 		err := services.SetWelcomeMessage(ctx, text)
 		if err != nil {

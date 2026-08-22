@@ -74,7 +74,6 @@ var indexSpecs = []indexSpec{
 	{"files", bson.D{{Key: "file_id", Value: 1}}, true},
 	{"files", bson.D{{Key: "subject_id", Value: 1}}, false},
 	{"files", bson.D{{Key: "name", Value: 1}}, false},
-	{"files", bson.D{{Key: "file_type", Value: 1}, {Key: "upload_date", Value: -1}}, false},
 	{"files", bson.D{{Key: "downloads", Value: -1}}, false},
 	{"files", bson.D{{Key: "upload_date", Value: -1}}, false},
 	{"file_ratings", bson.D{{Key: "user_id", Value: 1}, {Key: "file_id", Value: 1}}, true},
