@@ -223,3 +223,10 @@
 - [x] إضافة trace لنتيجة handler وإرسال Telegram reply دون كشف المحتوى
 - [ ] مطابقة bot username وTelegram ID مع سجل managed_bots
 - [ ] إصلاح نقطة الفشل النهائية بعد ظهور trace الجديد
+
+# Final Child Bot Fix
+
+- [x] إعادة تصميم claim للـlease بحيث لا يعتمد على upsert المتعارض
+- [x] التأكد من بدء polling للبوت الأب والفرعي بعد claim ناجح
+- [ ] التأكد من وصول `/start` إلى handler وإرسال الرد
+- [x] تشغيل الاختبارات ومزامنة الإصلاح النهائي

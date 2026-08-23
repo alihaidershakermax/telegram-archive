@@ -2,14 +2,12 @@ package factory
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 
 	"telegram-archive-bot/db"
 )
@@ -82,7 +80,7 @@ func (m *Manager) acquireWorkerLease(ctx context.Context, recordID string, teleg
 	}
 	now := time.Now().UTC()
 	leaseUntil := now.Add(workerLeaseDuration)
-	filter := bson.M{
+	leaseFilter := bson.M{
 		"_id": recordID,
 		"$or": []bson.M{
 			{"lease_until": bson.M{"$lte": now}},
@@ -90,27 +88,41 @@ func (m *Manager) acquireWorkerLease(ctx context.Context, recordID string, teleg
 			{"lease_owner": m.instanceID},
 		},
 	}
-	update := bson.M{"$set": bson.M{
+	leaseUpdate := bson.M{"$set": bson.M{
 		"lease_owner":     m.instanceID,
 		"telegram_bot_id": telegramBotID,
 		"lease_until":     leaseUntil,
 		"updated_at":      now,
 	}}
-	var claimed bson.M
-	err := db.Col("worker_leases").FindOneAndUpdate(ctx, filter, update, options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After)).Decode(&claimed)
+
+	// Update an existing, available lease first. Avoiding upsert here prevents
+	// MongoDB from attempting an insert when an active lease document exists.
+	result, err := db.Col("worker_leases").UpdateOne(ctx, leaseFilter, leaseUpdate)
 	if err != nil {
-		if mongo.IsDuplicateKeyError(err) {
-			// The lease document exists but is currently owned by another instance.
-			// The caller retries after the short lease interval.
-			return false
-		}
-		if !errors.Is(err, mongo.ErrNoDocuments) {
-			log.Printf("managed bot %s lease acquisition failed: %v", recordID, err)
-		}
+		log.Printf("managed bot %s lease update failed: %v", recordID, err)
 		return false
 	}
-	owner, _ := claimed["lease_owner"].(string)
-	return owner == m.instanceID
+	if result.MatchedCount == 1 {
+		return true
+	}
+
+	// There is no matching document. Insert is safe under a race: exactly one
+	// instance wins the unique _id and the others retry after the interval.
+	_, err = db.Col("worker_leases").InsertOne(ctx, bson.M{
+		"_id":             recordID,
+		"lease_owner":     m.instanceID,
+		"telegram_bot_id": telegramBotID,
+		"lease_until":     leaseUntil,
+		"updated_at":      now,
+	})
+	if err == nil {
+		return true
+	}
+	if mongo.IsDuplicateKeyError(err) {
+		return false
+	}
+	log.Printf("managed bot %s lease insert failed: %v", recordID, err)
+	return false
 }
 
 func (m *Manager) renewWorkerLease(ctx context.Context, recordID string) bool {
