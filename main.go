@@ -203,9 +203,24 @@ func main() {
 		}
 	}()
 
-	for update := range updates {
-		go handleUpdate(bot, update)
+	const parentUpdateQueueSize = 128
+	const parentUpdateWorkers = 4
+	updateQueue := make(chan tgbotapi.Update, parentUpdateQueueSize)
+	var updateWorkers sync.WaitGroup
+	for i := 0; i < parentUpdateWorkers; i++ {
+		updateWorkers.Add(1)
+		go func() {
+			defer updateWorkers.Done()
+			for update := range updateQueue {
+				handleUpdate(bot, update)
+			}
+		}()
 	}
+	for update := range updates {
+		updateQueue <- update
+	}
+	close(updateQueue)
+	updateWorkers.Wait()
 }
 
 func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {

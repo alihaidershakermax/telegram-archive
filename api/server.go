@@ -86,16 +86,10 @@ func (s *Server) archiveContextFromRequest(r *http.Request) (context.Context, er
 	if s.factory == nil {
 		return nil, errors.New("managed bot is not registered")
 	}
-	rows, err := s.factory.List(r.Context(), 0, true)
-	if err != nil {
-		return nil, err
+	if _, err := s.factory.GetByTelegramBotID(r.Context(), botID); err != nil {
+		return nil, errors.New("managed bot is not registered")
 	}
-	for _, row := range rows {
-		if row.TelegramBotID == botID {
-			return db.WithBotDatabase(r.Context(), botID), nil
-		}
-	}
-	return nil, errors.New("managed bot is not registered")
+	return db.WithBotDatabase(r.Context(), botID), nil
 }
 
 func (s *Server) Handler() http.Handler {

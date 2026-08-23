@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -126,11 +127,18 @@ func fileIDFromMessage(message *tgbotapi.Message, fileType string) string {
 }
 
 func downloadTelegramBytes(bot *tgbotapi.BotAPI, fileID string) ([]byte, error) {
+	const maxTransferBytes int64 = 100 * 1024 * 1024
 	file, err := bot.GetFile(tgbotapi.FileConfig{FileID: fileID})
 	if err != nil {
 		return nil, err
 	}
-	resp, err := http.Get(file.Link(bot.Token))
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, file.Link(bot.Token), nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +146,14 @@ func downloadTelegramBytes(bot *tgbotapi.BotAPI, fileID string) ([]byte, error) 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("telegram file download returned %s", resp.Status)
 	}
-	return io.ReadAll(resp.Body)
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxTransferBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxTransferBytes {
+		return nil, fmt.Errorf("telegram file exceeds transfer limit")
+	}
+	return data, nil
 }
 
 func fileMessageFromBytes(chatID int64, data []byte, fileType, name string) (tgbotapi.Chattable, error) {

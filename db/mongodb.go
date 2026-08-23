@@ -56,16 +56,16 @@ func IsScoped(ctx context.Context) bool {
 func databaseForContext(ctx context.Context) *mongo.Database {
 	name, _ := ctx.Value(botDatabaseKey{}).(string)
 	if name != "" {
-		if clusterID, ok := ctx.Value(botClusterKey{}).(string); ok && clusterID != "" {
-			externalMu.RLock()
-			external := externalClients[clusterID]
-			externalMu.RUnlock()
-			if external != nil {
-				return external.Database(name)
-			}
+		clusterID, _ := ctx.Value(botClusterKey{}).(string)
+		externalMu.RLock()
+		external := externalClients[clusterID]
+		primary := client
+		externalMu.RUnlock()
+		if clusterID != "" && external != nil {
+			return external.Database(name)
 		}
-		if client != nil {
-			return client.Database(name)
+		if primary != nil {
+			return primary.Database(name)
 		}
 	}
 	return db
@@ -97,15 +97,15 @@ func DatabaseForCluster(clusterID, databaseName string) *mongo.Database {
 	if databaseName == "" {
 		return nil
 	}
+	externalMu.RLock()
+	defer externalMu.RUnlock()
 	if clusterID == "" {
 		if client == nil {
 			return nil
 		}
 		return client.Database(databaseName)
 	}
-	externalMu.RLock()
 	external := externalClients[clusterID]
-	externalMu.RUnlock()
 	if external == nil {
 		return nil
 	}
@@ -162,10 +162,27 @@ func Col(name string) *mongo.Collection {
 
 // Close disconnects from MongoDB.
 func Close() {
-	if client != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		_ = client.Disconnect(ctx)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	externalMu.Lock()
+	primary := client
+	client = nil
+	externals := make([]*mongo.Client, 0, len(externalClients))
+	for clusterID, external := range externalClients {
+		if external != nil {
+			externals = append(externals, external)
+		}
+		delete(externalClients, clusterID)
+	}
+	botClusterRoutes = make(map[int64]string)
+	externalMu.Unlock()
+
+	if primary != nil {
+		_ = primary.Disconnect(ctx)
+	}
+	for _, external := range externals {
+		_ = external.Disconnect(ctx)
 	}
 }
 

@@ -158,3 +158,31 @@
 - [x] تحديد العملية الثانية التي تستخدم BOT_TOKEN أو اكتشاف duplicate workers داخل نفس process
 - [x] منع التعارض النهائي واختبار أن child bot يستقبل الأوامر والملفات
 - [x] توثيق خطوات تنظيف Webhook وإيقاف الخدمة القديمة والتحقق من Telegram getUpdates
+
+# Child Bot Not Responding Regression
+
+- [ ] تحديد البوت الفرعي المتأثر وحالة worker الخاصة به من السجل
+- [ ] التحقق من عدم وجود duplicate polling أو فشل lease أو Webhook
+- [ ] إصلاح سبب عدم استقبال تحديثات child bot
+- [ ] اختبار `/start` والأوامر والملفات ومزامنة الإصلاح
+
+# Full Production Audit
+
+- [ ] جرد أخطاء compile وruntime وقراءة مسارات startup وshutdown
+- [ ] تدقيق polling والـworker lifecycle والـlease وتعارض 409
+- [ ] تدقيق عزل bot namespace وcluster routing وعمليات migration
+- [ ] تدقيق صلاحيات Bot Factory وhandoff وgroup وAPI keys
+- [ ] تدقيق queue والتخزين والملفات والصور والإشعارات وPersonal Vault
+- [ ] تدقيق الأسرار والإعدادات والـDocker/Koyeb والـresource limits
+- [ ] إصلاح الأخطاء المؤكدة وإضافة اختبارات regression
+- [ ] مزامنة نتائج التدقيق والتوثيق إلى المستودع الثانوي
+
+- [x] إغلاق اتصالات MongoDB الخارجية عند shutdown لمنع تسريب الموارد
+- [x] إضافة فحص اتصال MongoDB الخارجي واختبار cleanup
+
+- [x] حماية قراءة client وcluster routes أثناء إغلاق MongoDB لمنع data race في shutdown
+
+- [x] إضافة context timeout وحد أقصى لحجم تنزيل Telegram في مسار التحويل والملفات المساعدة
+- [x] استبدال goroutines غير المحدودة في استقبال التحديثات بإدارة توازي محدودة
+
+- [x] إصلاح archiveContextFromRequest ليستخدم lookup مباشر لـ bot_id ولا يفشل بعد أكثر من 100 بوت
