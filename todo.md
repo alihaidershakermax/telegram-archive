@@ -245,3 +245,10 @@
 - [x] تدقيق إرسال AnswerCallbackQuery وتحرير/إرسال رسالة القائمة
 - [x] اختبار callback على parent وchild مع عزل namespace
 - [x] مزامنة الإصلاح وتوثيق commit النشر
+
+# Child Reply Keyboard Regression
+
+- [x] جرد أزرار Reply Keyboard ونصوصها الفعلية
+- [x] توجيه نصوص أزرار child إلى الوظائف المقابلة
+- [x] منع كسر مسار الرسائل النصية وحالة awaiting في parent
+- [x] إضافة اختبارات ومزامنة الإصلاح

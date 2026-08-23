@@ -313,8 +313,12 @@ func HandleUnbanCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 	bot.Send(msg)
 }
 
-// HandleTextMessage handles text messages based on user's awaiting state.
+// HandleTextMessage handles text messages based on user's awaiting state or
+// compatibility actions from Reply Keyboard versions of the bot.
 func HandleTextMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
+	if bot == nil || message == nil || message.From == nil || message.Chat == nil {
+		return
+	}
 	ctx := archiveContext(bot)
 	userID := message.From.ID
 	state := GetStateForBot(bot, userID)
@@ -326,11 +330,14 @@ func HandleTextMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 	}
 	state.Mu.Unlock()
 
+	text := strings.TrimSpace(message.Text)
 	if awaiting == nil {
+		if handleReplyKeyboardText(bot, message, text) {
+			return
+		}
 		return
 	}
 
-	text := strings.TrimSpace(message.Text)
 	if text == "" {
 		msg := tgbotapi.NewMessage(message.Chat.ID, "❌ يرجى إرسال نص صالح.")
 		bot.Send(msg)
@@ -427,6 +434,97 @@ func HandleTextMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 	default:
 		// unknown or "upload" — don't clear
 		return
+	}
+}
+
+// handleReplyKeyboardText keeps old Reply Keyboard messages functional. The
+// current UI uses InlineKeyboard, but Telegram clients can retain an older
+// Reply Keyboard in a chat until it is explicitly removed.
+func handleReplyKeyboardText(bot *tgbotapi.BotAPI, message *tgbotapi.Message, text string) bool {
+	switch legacyKeyboardAction(text) {
+	case "archive":
+		ctx := archiveContext(bot)
+		categories, err := services.GetCategories(ctx)
+		if err != nil {
+			log.Printf("legacy keyboard categories load failed: bot_id=%d err=%v", bot.Self.ID, err)
+			bot.Send(tgbotapi.NewMessage(message.Chat.ID, "❌ تعذر تحميل الملفات، حاول مرة أخرى."))
+			return true
+		}
+		kb := keyboards.CategoriesKeyboard(categories)
+		msg := tgbotapi.NewMessage(message.Chat.ID, "📂 اختر التصنيف:")
+		msg.ReplyMarkup = kb
+		bot.Send(msg)
+		return true
+	case "subscriptions":
+		HandleSubscriptionsCommand(bot, message)
+		return true
+	case "home":
+		HandleStart(bot, message)
+		return true
+	case "panel":
+		HandlePanel(bot, message)
+		return true
+	case "upload":
+		ctx := archiveContext(bot)
+		if allowed, _ := services.Can(ctx, message.From.ID, "manage_content"); !allowed {
+			bot.Send(tgbotapi.NewMessage(message.Chat.ID, "⛔ لا تملك صلاحية رفع الملفات."))
+			return true
+		}
+		WithStateForBot(bot, message.From.ID, func(state *models.UserState) {
+			state.Awaiting = &models.AwaitingState{Type: "upload"}
+			state.PendingUploads = nil
+			state.UploadLoc = nil
+		})
+		bot.Send(tgbotapi.NewMessage(message.Chat.ID, "📤 أرسل الملفات الآن (مستند/فيديو/صوت/صورة)."))
+		return true
+	case "help":
+		bot.Send(tgbotapi.NewMessage(message.Chat.ID, "استخدم أزرار القائمة الحالية أو الأمر /start."))
+		return true
+	case "services":
+		bot.Send(tgbotapi.NewMessage(message.Chat.ID, "الخدمات المتاحة: أرشيف الملفات، المشاركة، Vault، والاشتراك في المواد."))
+		return true
+	case "search_removed", "favorites", "unread", "stats", "ai", "ask_admin", "request_file", "ratings":
+		bot.Send(tgbotapi.NewMessage(message.Chat.ID, "ℹ️ هذا الزر من نسخة قديمة. أرسل /start لفتح القائمة الحالية."))
+		return true
+	default:
+		return false
+	}
+}
+
+func legacyKeyboardAction(text string) string {
+	switch strings.TrimSpace(text) {
+	case "📁 الملفات", "📂 الملفات":
+		return "archive"
+	case "🔍 بحث":
+		return "search_removed"
+	case "📢 اشتراكاتي":
+		return "subscriptions"
+	case "⭐ المفضلة":
+		return "favorites"
+	case "🆕 غير مقروءة":
+		return "unread"
+	case "📊 إحصائياتي":
+		return "stats"
+	case "🤖 مهندس الذكاء":
+		return "ai"
+	case "❓ سؤال للإدارة":
+		return "ask_admin"
+	case "🔗 خدماتنا":
+		return "services"
+	case "🔙 الرئيسية":
+		return "home"
+	case "🛠 لوحة الأدمن":
+		return "panel"
+	case "📝 طلب ملف":
+		return "request_file"
+	case "📤 رفع ملفات":
+		return "upload"
+	case "⭐ التقييمات":
+		return "ratings"
+	case "ℹ️ المساعدة":
+		return "help"
+	default:
+		return ""
 	}
 }
 
