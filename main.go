@@ -224,7 +224,15 @@ func main() {
 }
 
 func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
+	if bot == nil {
+		log.Printf("update dropped update_id=%d reason=nil_bot", update.UpdateID)
+		return
+	}
+	if update.CallbackQuery != nil || (update.Message != nil && (update.Message.IsCommand() || hasFile(update.Message))) {
+		log.Printf("update dispatch bot_id=%d update_id=%d kind=%s", bot.Self.ID, update.UpdateID, updateDispatchKind(update))
+	}
 	if !handlers.AllowBotUpdate(bot) {
+		log.Printf("update dropped bot_id=%d update_id=%d reason=quota", bot.Self.ID, update.UpdateID)
 		if update.Message != nil {
 			bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "⏳ تم الوصول إلى حد الطلبات لهذا البوت، يرجى المحاولة بعد قليل."))
 		}
@@ -239,6 +247,7 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	// Handle callback queries
 	if update.CallbackQuery != nil {
 		handlers.HandleCallback(bot, update.CallbackQuery)
+		log.Printf("update handled bot_id=%d update_id=%d kind=callback", bot.Self.ID, update.UpdateID)
 		return
 	}
 
@@ -251,7 +260,8 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 
 	// Handle commands
 	if msg.IsCommand() {
-		switch msg.Command() {
+		command := msg.Command()
+		switch command {
 		case "start":
 			handlers.HandleStart(bot, msg)
 		case "id":
@@ -308,6 +318,7 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 		case "cancel":
 			handlers.HandleCancelCommand(bot, msg)
 		}
+		log.Printf("update handled bot_id=%d update_id=%d kind=command:%s", bot.Self.ID, update.UpdateID, command)
 		return
 	}
 
@@ -325,6 +336,22 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 		handlers.HandleFileUpload(bot, msg)
 		return
 	}
+}
+
+func updateDispatchKind(update tgbotapi.Update) string {
+	if update.CallbackQuery != nil {
+		return "callback"
+	}
+	if update.Message != nil {
+		if update.Message.IsCommand() {
+			return "command:" + update.Message.Command()
+		}
+		if hasFile(update.Message) {
+			return "file"
+		}
+		return "message"
+	}
+	return "other"
 }
 
 func hasFile(msg *tgbotapi.Message) bool {

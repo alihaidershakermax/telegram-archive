@@ -216,3 +216,10 @@
 - [x] إصلاح FindOneAndUpdate upsert عندما يكون سجل lease موجوداً لكنه مملوكاً لنسخة أخرى
 - [x] منع تكرار سجلات lease مع الحفاظ على انتظار النسخة غير المالكة
 - [x] إضافة اختبار regression لخطأ E11000 وإعادة claim بعد انتهاء lease
+
+# Child Response Path Regression
+
+- [x] إضافة trace لوصول update إلى child poll ثم handleUpdate
+- [x] إضافة trace لنتيجة handler وإرسال Telegram reply دون كشف المحتوى
+- [ ] مطابقة bot username وTelegram ID مع سجل managed_bots
+- [ ] إصلاح نقطة الفشل النهائية بعد ظهور trace الجديد
