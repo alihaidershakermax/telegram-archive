@@ -217,6 +217,7 @@ var indexSpecs = []indexSpec{
 	{"bot_settings", bson.D{{Key: "key", Value: 1}}, true},
 	{"managed_bots", bson.D{{Key: "owner_id", Value: 1}, {Key: "created_at", Value: -1}}, false},
 	{"managed_bots", bson.D{{Key: "token_hash", Value: 1}}, true},
+	{"managed_bots", bson.D{{Key: "telegram_bot_id", Value: 1}}, true},
 	{"managed_bots", bson.D{{Key: "status", Value: 1}, {Key: "updated_at", Value: -1}}, false},
 	{"worker_leases", bson.D{{Key: "lease_until", Value: 1}}, false},
 	{"admin_logs", bson.D{{Key: "admin_id", Value: 1}, {Key: "timestamp", Value: -1}}, false},

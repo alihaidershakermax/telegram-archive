@@ -241,3 +241,7 @@ The bot must be an administrator in the archive channel with permission to post 
 ## License
 
 This project is licensed under the **GNU General Public License v3.0 only**. See [`LICENSE`](./LICENSE) for the full license text. The official license reference is available at [GNU GPL v3](https://www.gnu.org/licenses/gpl-3.0.html).
+
+### Lease retry during rolling deployments
+
+إذا كان instance قديم يملك polling مؤقتاً، لا يحذف worker الجديد نفسه نهائياً. يعيد child worker والـparent محاولة اكتساب lease كل خمس ثوانٍ، ويبدآن `getUpdates` تلقائياً بعد تحرير النسخة القديمة للـlease. الإصدارات القديمة قبل تطبيق lease يجب إيقافها يدوياً لأنها لا تشارك في بروتوكول الملكية.

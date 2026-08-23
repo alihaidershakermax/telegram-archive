@@ -186,3 +186,14 @@
 - [x] استبدال goroutines غير المحدودة في استقبال التحديثات بإدارة توازي محدودة
 
 - [x] إصلاح archiveContextFromRequest ليستخدم lookup مباشر لـ bot_id ولا يفشل بعد أكثر من 100 بوت
+
+# Child Bot Persistent Failure
+
+- [ ] إضافة trace مؤقت يحدد وصول update إلى worker وhandleUpdate وhandler
+- [x] التحقق من أن آخر commit منشور فعلياً في بيئة التشغيل
+- [x] إصلاح نقطة الفشل المثبتة فقط وإضافة اختبار لها
+
+- [x] إضافة unique index على managed_bots.telegram_bot_id ومنع تكرار البوت عند تدوير Token
+
+- [x] إعادة محاولة اكتساب lease للـchild والـparent بدلاً من حذف worker عند التعارض المؤقت أثناء rolling deploy
+- [x] إعادة بدء polling تلقائياً بعد انتهاء النسخة القديمة أو تحرير lease

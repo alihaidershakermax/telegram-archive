@@ -15,8 +15,9 @@ import (
 )
 
 const (
-	workerLeaseDuration = 90 * time.Second
-	workerLeaseRenewal  = 30 * time.Second
+	workerLeaseDuration      = 90 * time.Second
+	workerLeaseRenewal       = 30 * time.Second
+	workerLeaseRetryInterval = 5 * time.Second
 )
 
 func primaryLeaseID(telegramBotID int64) string {
@@ -32,6 +33,11 @@ func (m *Manager) AcquirePrimaryLease(ctx context.Context, telegramBotID int64) 
 	return m.acquireWorkerLease(ctx, primaryLeaseID(telegramBotID), telegramBotID)
 }
 
+// WaitForPrimaryLease retries until the parent update stream is available or stop is closed.
+func (m *Manager) WaitForPrimaryLease(ctx context.Context, telegramBotID int64, stop <-chan struct{}) bool {
+	return m.waitForWorkerLease(ctx, primaryLeaseID(telegramBotID), telegramBotID, stop)
+}
+
 // RenewPrimaryLease extends the parent bot update-stream reservation.
 func (m *Manager) RenewPrimaryLease(ctx context.Context, telegramBotID int64) bool {
 	return m.renewWorkerLease(ctx, primaryLeaseID(telegramBotID))
@@ -40,6 +46,34 @@ func (m *Manager) RenewPrimaryLease(ctx context.Context, telegramBotID int64) bo
 // ReleasePrimaryLease releases the parent bot update-stream reservation.
 func (m *Manager) ReleasePrimaryLease(ctx context.Context, telegramBotID int64) {
 	m.releaseWorkerLease(ctx, primaryLeaseID(telegramBotID))
+}
+
+func (m *Manager) waitForWorkerLease(ctx context.Context, recordID string, telegramBotID int64, stop <-chan struct{}) bool {
+	for {
+		if stop != nil {
+			select {
+			case <-stop:
+				return false
+			default:
+			}
+		}
+		attemptCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		claimed := m.acquireWorkerLease(attemptCtx, recordID, telegramBotID)
+		cancel()
+		if claimed {
+			return true
+		}
+		timer := time.NewTimer(workerLeaseRetryInterval)
+		select {
+		case <-timer.C:
+		case <-ctx.Done():
+			timer.Stop()
+			return false
+		case <-stop:
+			timer.Stop()
+			return false
+		}
+	}
 }
 
 func (m *Manager) acquireWorkerLease(ctx context.Context, recordID string, telegramBotID int64) bool {

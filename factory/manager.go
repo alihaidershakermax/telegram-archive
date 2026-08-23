@@ -492,15 +492,13 @@ func (m *Manager) startWorker(record models.ManagedBot, bot *tgbotapi.BotAPI) er
 
 func (m *Manager) poll(id string, worker *managedWorker) {
 	defer close(worker.closed)
-	leaseCtx, cancelLease := context.WithTimeout(context.Background(), 10*time.Second)
 	leaseID := managedLeaseID(worker.bot.Self.ID)
-	claimed := m.acquireWorkerLease(leaseCtx, leaseID, worker.bot.Self.ID)
-	cancelLease()
-	if !claimed {
-		log.Printf("managed bot %s skipped: another instance owns its polling lease", id)
+	log.Printf("managed bot %s waiting for polling lease", id)
+	if !m.waitForWorkerLease(context.Background(), leaseID, worker.bot.Self.ID, worker.stop) {
 		m.removeWorker(id, worker)
 		return
 	}
+	log.Printf("managed bot %s acquired polling lease", id)
 	defer m.releaseWorkerLease(context.Background(), leaseID)
 
 	if _, err := worker.bot.Request(tgbotapi.DeleteWebhookConfig{DropPendingUpdates: false}); err != nil {
