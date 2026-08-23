@@ -544,9 +544,13 @@ func (m *Manager) poll(id string, worker *managedWorker) {
 			}
 			started := time.Now()
 			worker.stats.activeRequests.Add(1)
-			worker.stats.totalUpdates.Add(1)
+			total := worker.stats.totalUpdates.Add(1)
 			worker.stats.lastSeenUnix.Store(time.Now().Unix())
+			if total <= 5 || total%100 == 0 {
+				log.Printf("managed bot %s received update_id=%d kind=%s total=%d", id, update.UpdateID, managedUpdateKind(update), total)
+			}
 			if m.handler != nil {
+
 				func() {
 					defer func() {
 						if recovered := recover(); recovered != nil {
@@ -561,6 +565,29 @@ func (m *Manager) poll(id string, worker *managedWorker) {
 			worker.stats.lastLatencyNS.Store(time.Since(started).Nanoseconds())
 			worker.stats.activeRequests.Add(-1)
 		}
+	}
+}
+
+func managedUpdateKind(update tgbotapi.Update) string {
+	switch {
+	case update.CallbackQuery != nil:
+		return "callback"
+	case update.Message != nil:
+		if update.Message.IsCommand() {
+			return "command:" + update.Message.Command()
+		}
+		if update.Message.Document != nil || update.Message.Video != nil || update.Message.Audio != nil || update.Message.Animation != nil || update.Message.Voice != nil || len(update.Message.Photo) > 0 {
+			return "file"
+		}
+		return "message"
+	case update.InlineQuery != nil:
+		return "inline_query"
+	case update.ChosenInlineResult != nil:
+		return "chosen_inline_result"
+	case update.ChatMember != nil || update.MyChatMember != nil:
+		return "chat_member"
+	default:
+		return "other"
 	}
 }
 

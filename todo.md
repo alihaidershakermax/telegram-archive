@@ -189,7 +189,7 @@
 
 # Child Bot Persistent Failure
 
-- [ ] إضافة trace مؤقت يحدد وصول update إلى worker وhandleUpdate وhandler
+- [x] إضافة trace مؤقت يحدد وصول update إلى worker وhandleUpdate وhandler
 - [x] التحقق من أن آخر commit منشور فعلياً في بيئة التشغيل
 - [x] إصلاح نقطة الفشل المثبتة فقط وإضافة اختبار لها
 
@@ -197,3 +197,9 @@
 
 - [x] إعادة محاولة اكتساب lease للـchild والـparent بدلاً من حذف worker عند التعارض المؤقت أثناء rolling deploy
 - [x] إعادة بدء polling تلقائياً بعد انتهاء النسخة القديمة أو تحرير lease
+
+# Child Update Trace
+
+- [ ] إضافة log آمن يثبت وصول تحديث child إلى polling وhandleUpdate
+- [x] تسجيل سبب إسقاط التحديث إن كان quota أو نوع update أو handler
+- [x] اختبار `/start` و`/id` وcallback بعد نشر trace
