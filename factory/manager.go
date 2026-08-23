@@ -501,10 +501,16 @@ func (m *Manager) poll(id string, worker *managedWorker) {
 	log.Printf("managed bot %s acquired polling lease", id)
 	defer m.releaseWorkerLease(context.Background(), leaseID)
 
+	if info, err := worker.bot.GetWebhookInfo(); err != nil {
+		log.Printf("managed bot %d webhook info failed: %v", worker.bot.Self.ID, err)
+	} else {
+		log.Printf("managed bot %d identity username=@%s webhook_set=%t pending_updates=%d", worker.bot.Self.ID, worker.bot.Self.UserName, info.IsSet(), info.PendingUpdateCount)
+	}
 	if _, err := worker.bot.Request(tgbotapi.DeleteWebhookConfig{DropPendingUpdates: false}); err != nil {
 		log.Printf("managed bot %d webhook cleanup failed: %v", worker.bot.Self.ID, err)
 	}
 	configureManagedBotCommands(worker.bot)
+	log.Printf("managed bot %d polling started username=@%s", worker.bot.Self.ID, worker.bot.Self.UserName)
 	go m.health(id, worker)
 	updateConfig := tgbotapi.NewUpdate(0)
 	updateConfig.Timeout = 30

@@ -200,6 +200,13 @@
 
 # Child Update Trace
 
-- [ ] إضافة log آمن يثبت وصول تحديث child إلى polling وhandleUpdate
+- [x] إضافة log آمن يثبت وصول تحديث child إلى polling وhandleUpdate
 - [x] تسجيل سبب إسقاط التحديث إن كان quota أو نوع update أو handler
 - [x] اختبار `/start` و`/id` وcallback بعد نشر trace
+
+# Child Token and Update Verification
+
+- [ ] مطابقة Telegram ID للبوت الفرعي مع Token الموجود في managed_bots دون كشف Token
+- [ ] التحقق من أن الرسالة تُرسل إلى البوت الفرعي الصحيح وليس البوت الأب
+- [ ] التحقق من وجود `received update_id` بعد إرسال `/start`
+- [ ] إصلاح أو توثيق أي فشل متبقٍ في Telegram update delivery
