@@ -210,3 +210,9 @@
 - [ ] التحقق من أن الرسالة تُرسل إلى البوت الفرعي الصحيح وليس البوت الأب
 - [ ] التحقق من وجود `received update_id` بعد إرسال `/start`
 - [ ] إصلاح أو توثيق أي فشل متبقٍ في Telegram update delivery
+
+# Lease DuplicateKey Regression
+
+- [x] إصلاح FindOneAndUpdate upsert عندما يكون سجل lease موجوداً لكنه مملوكاً لنسخة أخرى
+- [x] منع تكرار سجلات lease مع الحفاظ على انتظار النسخة غير المالكة
+- [x] إضافة اختبار regression لخطأ E11000 وإعادة claim بعد انتهاء lease

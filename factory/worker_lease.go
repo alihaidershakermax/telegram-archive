@@ -99,6 +99,11 @@ func (m *Manager) acquireWorkerLease(ctx context.Context, recordID string, teleg
 	var claimed bson.M
 	err := db.Col("worker_leases").FindOneAndUpdate(ctx, filter, update, options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After)).Decode(&claimed)
 	if err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			// The lease document exists but is currently owned by another instance.
+			// The caller retries after the short lease interval.
+			return false
+		}
 		if !errors.Is(err, mongo.ErrNoDocuments) {
 			log.Printf("managed bot %s lease acquisition failed: %v", recordID, err)
 		}
