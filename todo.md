@@ -238,3 +238,10 @@
 - [x] إصلاح توافق callbacks مع bot_id وnamespace البوت الفرعي
 - [x] إضافة اختبارات للأزرار ومزامنة الإصلاح
 - [ ] نشر نسخة callback الجديدة واختبار ضغط زر فعلي من child bot
+
+# Parent and Child Buttons Regression
+
+- [x] تحديد سبب عدم استجابة أزرار البوت الأب والفرعي من المسار المشترك
+- [x] تدقيق إرسال AnswerCallbackQuery وتحرير/إرسال رسالة القائمة
+- [x] اختبار callback على parent وchild مع عزل namespace
+- [x] مزامنة الإصلاح وتوثيق commit النشر

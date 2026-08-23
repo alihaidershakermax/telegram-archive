@@ -231,6 +231,11 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	if update.CallbackQuery != nil || (update.Message != nil && (update.Message.IsCommand() || hasFile(update.Message))) {
 		log.Printf("update dispatch bot_id=%d update_id=%d kind=%s", bot.Self.ID, update.UpdateID, updateDispatchKind(update))
 	}
+	// Telegram requires callback queries to be acknowledged quickly. Do this
+	// before quota checks, database reads, or any potentially slow route.
+	if update.CallbackQuery != nil {
+		handlers.AcknowledgeCallback(bot, update.CallbackQuery)
+	}
 	if !handlers.AllowBotUpdate(bot) {
 		log.Printf("update dropped bot_id=%d update_id=%d reason=quota", bot.Self.ID, update.UpdateID)
 		if update.Message != nil {

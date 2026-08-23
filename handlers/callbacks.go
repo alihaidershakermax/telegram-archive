@@ -26,7 +26,6 @@ func HandleCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 	if query.Message == nil || query.Message.Chat == nil || query.From == nil {
 		// CallbackQuery.Message is normally present for inline keyboards, but
 		// Telegram may omit it for inline-mode callbacks.
-		answerCallback(bot, query, "❌ انتهت صلاحية هذا الزر، أرسل /start من جديد.", true)
 		log.Printf("Callback dropped: missing message/chat/from data=%q", query.Data)
 		return
 	}
@@ -40,24 +39,22 @@ func HandleCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 
 	log.Printf("Callback received: bot_id=%d data=%q user_id=%d chat_id=%d message_id=%d scope=%s", bot.Self.ID, data, userID, chatID, msgID, db.ScopeKey(ctx))
 
-	// Check ban/mute before acknowledging so Telegram receives the useful
-	// alert in the same callback response. Every callback is answered once.
+	// The callback was acknowledged at the very beginning of handleUpdate.
+	// Keep policy checks here, after the fast Telegram acknowledgement.
 	if services.IsBanned(ctx, userID) {
-		answerCallback(bot, query, "⛔ أنت محظور من استخدام البوت.", true)
+		bot.Send(tgbotapi.NewMessage(chatID, "⛔ أنت محظور من استخدام البوت."))
 		return
 	}
 	if services.IsMuted(ctx, userID) {
-		answerCallback(bot, query, "🔇 أنت مكتوم من استخدام البوت.", true)
+		bot.Send(tgbotapi.NewMessage(chatID, "🔇 أنت مكتوم من استخدام البوت."))
 		return
 	}
 
 	isAdmin, _ := services.IsAdmin(ctx, userID)
 	if !isAdmin && services.IsMaintenanceEnabled(ctx) {
-		answerCallback(bot, query, "🔧 البوت تحت الصيانة حالياً", true)
+		bot.Send(tgbotapi.NewMessage(chatID, "🔧 البوت تحت الصيانة حالياً"))
 		return
 	}
-
-	answerCallback(bot, query, "", false)
 
 	// Route callbacks
 	switch {
@@ -407,6 +404,12 @@ func HandleCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 }
 
 // ── User navigation helpers ─────────────────────────────────
+
+// AcknowledgeCallback must be called before any slow callback route.
+// Telegram clients keep showing a spinner until answerCallbackQuery returns.
+func AcknowledgeCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
+	answerCallback(bot, query, "", false)
+}
 
 func answerCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, text string, showAlert bool) {
 	if bot == nil || query == nil || query.ID == "" {
