@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"log"
 	"path/filepath"
 	"strings"
 
@@ -122,13 +123,18 @@ func EditOrSend(bot *tgbotapi.BotAPI, callbackID string, chatID int64, messageID
 	if hasPhoto {
 		// If the original message had a photo, delete and send new text message
 		del := tgbotapi.NewDeleteMessage(chatID, messageID)
-		bot.Send(del)
+		if _, err := bot.Send(del); err != nil {
+			log.Printf("EditOrSend delete photo failed: chat_id=%d message_id=%d err=%v", chatID, messageID, err)
+		}
 		msg := tgbotapi.NewMessage(chatID, text)
 		if markup != nil {
 			msg.ReplyMarkup = markup
 		}
-		bot.Send(msg)
+		if _, err := bot.Send(msg); err != nil {
+			log.Printf("EditOrSend send replacement failed: chat_id=%d message_id=%d err=%v", chatID, messageID, err)
+		}
 		return
+
 	}
 
 	edit := tgbotapi.NewEditMessageText(chatID, messageID, text)
@@ -141,13 +147,18 @@ func EditOrSend(bot *tgbotapi.BotAPI, callbackID string, chatID int64, messageID
 		if strings.Contains(errMsg, "message is not modified") {
 			return
 		}
+		log.Printf("EditOrSend edit failed: chat_id=%d message_id=%d err=%v", chatID, messageID, err)
 		// Fallback: delete and send new
 		del := tgbotapi.NewDeleteMessage(chatID, messageID)
-		bot.Send(del)
+		if _, deleteErr := bot.Send(del); deleteErr != nil {
+			log.Printf("EditOrSend fallback delete failed: chat_id=%d message_id=%d err=%v", chatID, messageID, deleteErr)
+		}
 		msg := tgbotapi.NewMessage(chatID, text)
 		if markup != nil {
 			msg.ReplyMarkup = markup
 		}
-		bot.Send(msg)
+		if _, sendErr := bot.Send(msg); sendErr != nil {
+			log.Printf("EditOrSend fallback send failed: chat_id=%d message_id=%d err=%v", chatID, messageID, sendErr)
+		}
 	}
 }

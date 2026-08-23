@@ -10,6 +10,7 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 
 	"telegram-archive-bot/config"
+	"telegram-archive-bot/db"
 	"telegram-archive-bot/keyboards"
 	"telegram-archive-bot/models"
 	"telegram-archive-bot/services"
@@ -18,37 +19,45 @@ import (
 
 // HandleCallback routes all callback queries.
 func HandleCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
+	if bot == nil || query == nil {
+		log.Printf("Callback dropped: nil bot or query")
+		return
+	}
+	if query.Message == nil || query.Message.Chat == nil || query.From == nil {
+		// CallbackQuery.Message is normally present for inline keyboards, but
+		// Telegram may omit it for inline-mode callbacks.
+		answerCallback(bot, query, "❌ انتهت صلاحية هذا الزر، أرسل /start من جديد.", true)
+		log.Printf("Callback dropped: missing message/chat/from data=%q", query.Data)
+		return
+	}
+
 	ctx := archiveContext(bot)
-	data := query.Data
+	data := strings.TrimSpace(query.Data)
 	userID := query.From.ID
 	chatID := query.Message.Chat.ID
 	msgID := query.Message.MessageID
 	hasPhoto := query.Message.Photo != nil && len(query.Message.Photo) > 0
 
-	log.Printf("Callback: data=%q user_id=%d", data, userID)
+	log.Printf("Callback received: bot_id=%d data=%q user_id=%d chat_id=%d message_id=%d scope=%s", bot.Self.ID, data, userID, chatID, msgID, db.ScopeKey(ctx))
 
-	// Check ban/mute
+	// Check ban/mute before acknowledging so Telegram receives the useful
+	// alert in the same callback response. Every callback is answered once.
 	if services.IsBanned(ctx, userID) {
-		cb := tgbotapi.NewCallbackWithAlert(query.ID, "⛔ أنت محظور من استخدام البوت.")
-		bot.Send(cb)
+		answerCallback(bot, query, "⛔ أنت محظور من استخدام البوت.", true)
 		return
 	}
 	if services.IsMuted(ctx, userID) {
-		cb := tgbotapi.NewCallbackWithAlert(query.ID, "🔇 أنت مكتوم من استخدام البوت.")
-		bot.Send(cb)
+		answerCallback(bot, query, "🔇 أنت مكتوم من استخدام البوت.", true)
 		return
 	}
 
 	isAdmin, _ := services.IsAdmin(ctx, userID)
 	if !isAdmin && services.IsMaintenanceEnabled(ctx) {
-		cb := tgbotapi.NewCallbackWithAlert(query.ID, "🔧 البوت تحت الصيانة حالياً")
-		bot.Send(cb)
+		answerCallback(bot, query, "🔧 البوت تحت الصيانة حالياً", true)
 		return
 	}
 
-	// Answer callback
-	cb := tgbotapi.NewCallback(query.ID, "")
-	bot.Send(cb)
+	answerCallback(bot, query, "", false)
 
 	// Route callbacks
 	switch {
@@ -390,21 +399,50 @@ func HandleCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery) {
 		kb := keyboards.UploadCategoriesKeyboard(cats)
 		text := fmt.Sprintf("📂 اختر التصنيف لحفظ (%d) ملف:", count)
 		utils.EditOrSend(bot, query.ID, chatID, msgID, text, &kb, hasPhoto)
+
+	default:
+		log.Printf("Callback unhandled: bot_id=%d data=%q user_id=%d scope=%s", bot.Self.ID, data, userID, db.ScopeKey(ctx))
+		bot.Send(tgbotapi.NewMessage(chatID, "⚠️ هذا الزر من إصدار قديم. أرسل /start لفتح القائمة الحالية."))
 	}
 }
 
 // ── User navigation helpers ─────────────────────────────────
 
+func answerCallback(bot *tgbotapi.BotAPI, query *tgbotapi.CallbackQuery, text string, showAlert bool) {
+	if bot == nil || query == nil || query.ID == "" {
+		return
+	}
+	var callback tgbotapi.CallbackConfig
+	if showAlert {
+		callback = tgbotapi.NewCallbackWithAlert(query.ID, text)
+	} else {
+		callback = tgbotapi.NewCallback(query.ID, text)
+	}
+	if _, err := bot.Request(callback); err != nil {
+		log.Printf("Callback answer failed: callback_id=%s data=%q err=%v", query.ID, query.Data, err)
+	}
+}
+
 func showCategories(bot *tgbotapi.BotAPI, chatID int64, msgID int, hasPhoto bool) {
 	ctx := archiveContext(bot)
-	cats, _ := services.GetCategories(ctx)
+	cats, err := services.GetCategories(ctx)
+	if err != nil {
+		log.Printf("Callback categories load failed: bot_id=%d scope=%s err=%v", bot.Self.ID, db.ScopeKey(ctx), err)
+		utils.EditOrSend(bot, "", chatID, msgID, "❌ تعذر تحميل التصنيفات، حاول مرة أخرى.", nil, hasPhoto)
+		return
+	}
 	kb := keyboards.CategoriesKeyboard(cats)
 	utils.EditOrSend(bot, "", chatID, msgID, "📂 اختر التصنيف:", &kb, hasPhoto)
 }
 
 func showSubjects(bot *tgbotapi.BotAPI, chatID int64, msgID, catID int, hasPhoto bool) {
 	ctx := archiveContext(bot)
-	subs, _ := services.GetSubjects(ctx, &catID)
+	subs, err := services.GetSubjects(ctx, &catID)
+	if err != nil {
+		log.Printf("Callback subjects load failed: bot_id=%d category_id=%d scope=%s err=%v", bot.Self.ID, catID, db.ScopeKey(ctx), err)
+		utils.EditOrSend(bot, "", chatID, msgID, "❌ تعذر تحميل المواد، حاول مرة أخرى.", nil, hasPhoto)
+		return
+	}
 	if len(subs) == 0 {
 		kb := tgbotapi.NewInlineKeyboardMarkup(
 			tgbotapi.NewInlineKeyboardRow(
@@ -420,7 +458,12 @@ func showSubjects(bot *tgbotapi.BotAPI, chatID int64, msgID, catID int, hasPhoto
 
 func showFiles(bot *tgbotapi.BotAPI, chatID int64, msgID, subID int, hasPhoto bool) {
 	ctx := archiveContext(bot)
-	files, _ := services.GetFiles(ctx, subID)
+	files, err := services.GetFiles(ctx, subID)
+	if err != nil {
+		log.Printf("Callback files load failed: bot_id=%d subject_id=%d scope=%s err=%v", bot.Self.ID, subID, db.ScopeKey(ctx), err)
+		utils.EditOrSend(bot, "", chatID, msgID, "❌ تعذر تحميل الملفات، حاول مرة أخرى.", nil, hasPhoto)
+		return
+	}
 	sub, _ := services.GetSubjectByID(ctx, subID)
 	catID := 0
 	if sub != nil {

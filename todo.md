@@ -230,3 +230,11 @@
 - [x] التأكد من بدء polling للبوت الأب والفرعي بعد claim ناجح
 - [ ] التأكد من وصول `/start` إلى handler وإرسال الرد
 - [x] تشغيل الاختبارات ومزامنة الإصلاح النهائي
+
+# Child Inline Buttons Regression
+
+- [x] فحص callback_data لكل أزرار الترحيب والقائمة والملفات
+- [x] ضمان AnswerCallbackQuery لكل callback حتى لا يبقى الزر عالقاً
+- [x] إصلاح توافق callbacks مع bot_id وnamespace البوت الفرعي
+- [x] إضافة اختبارات للأزرار ومزامنة الإصلاح
+- [ ] نشر نسخة callback الجديدة واختبار ضغط زر فعلي من child bot
