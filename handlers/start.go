@@ -441,7 +441,11 @@ func HandleTextMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 // current UI uses InlineKeyboard, but Telegram clients can retain an older
 // Reply Keyboard in a chat until it is explicitly removed.
 func handleReplyKeyboardText(bot *tgbotapi.BotAPI, message *tgbotapi.Message, text string) bool {
-	switch legacyKeyboardAction(text) {
+	action := legacyKeyboardAction(text)
+	if action != "" {
+		log.Printf("reply keyboard action bot_id=%d user_id=%d chat_id=%d action=%s", bot.Self.ID, message.From.ID, message.Chat.ID, action)
+	}
+	switch action {
 	case "archive":
 		ctx := archiveContext(bot)
 		categories, err := services.GetCategories(ctx)

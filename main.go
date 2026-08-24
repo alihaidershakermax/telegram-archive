@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -327,8 +328,16 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 		return
 	}
 
-	// Handle text messages (for awaiting state)
+	// Handle text messages (including Reply Keyboard button presses).
 	if msg.Text != "" {
+		var chatID, userID int64
+		if msg.Chat != nil {
+			chatID = msg.Chat.ID
+		}
+		if msg.From != nil {
+			userID = msg.From.ID
+		}
+		log.Printf("message received bot_id=%d update_id=%d chat_id=%d user_id=%d text=%q", bot.Self.ID, update.UpdateID, chatID, userID, truncateUpdateText(msg.Text))
 		if handlers.HandleFactoryText(bot, msg) {
 			return
 		}
@@ -341,6 +350,16 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 		handlers.HandleFileUpload(bot, msg)
 		return
 	}
+}
+
+func truncateUpdateText(text string) string {
+	text = strings.TrimSpace(text)
+	const maxRunes = 80
+	runes := []rune(text)
+	if len(runes) <= maxRunes {
+		return text
+	}
+	return string(runes[:maxRunes]) + "…"
 }
 
 func updateDispatchKind(update tgbotapi.Update) string {
