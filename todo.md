@@ -263,20 +263,20 @@
 
 # Koyeb Instance Stop Analysis
 
-- [ ] تحديد ما إذا كان Instance stopping ناتجاً عن Koyeb أو shutdown داخلي
+- [x] تحديد ما إذا كان Instance stopping ناتجاً عن Koyeb أو shutdown داخلي
 - [ ] تدقيق استمرار parent وchild polling حتى لحظة التوقف
 - [x] إضافة تشخيص أو إصلاح lifecycle المؤكد فقط
-- [ ] توثيق خطوات إعادة التشغيل والتحقق من keyboard
+- [x] توثيق خطوات إعادة التشغيل والتحقق من keyboard
 
 # Attached Koyeb Log Verification
 
-- [ ] مطابقة زمن الضغط مع أي update للـparent أو child في السجل المرفق
+- [x] مطابقة زمن الضغط مع أي update للـparent أو child في السجل المرفق
 - [ ] التحقق من أن النسخة المرفوعة تحتوي trace `message received` و`reply keyboard action`
-- [ ] عدم تغيير الكود ما لم يثبت السجل نقطة انقطاع جديدة
+- [x] عدم تغيير الكود ما لم يثبت السجل نقطة انقطاع جديدة
 
 # Repeated Koyeb Log
 
-- [ ] تأكيد أن السجل المرفق الثاني مطابق للأول ولا يحتوي update من Telegram
+- [x] تأكيد أن السجل المرفق الثاني مطابق للأول ولا يحتوي update من Telegram
 - [ ] طلب سجل يتضمن اختبار ضغط الزر أثناء polling الفعلي
 
 # Koyeb Repeated Shutdown Regression
@@ -297,7 +297,7 @@
 - [x] جرد أي scale-to-zero أو idle timeout أو sleep داخلي في الكود
 - [x] إزالة منطق الإيقاف التلقائي الداخلي إن وُجد
 - [x] التأكد من بقاء polling والـhealth server نشطين حتى SIGTERM الخارجي
-- [ ] تشغيل الاختبارات ومزامنة الإصلاح
+- [x] تشغيل الاختبارات ومزامنة الإصلاح
 
 # Full Code Audit
 
@@ -309,7 +309,7 @@
 - [x] تدقيق queues وdownloads وstorage وtimeouts وتسريب الموارد
 - [x] تدقيق API والأخطاء الصامتة وتسجيل الأسرار
 - [x] إصلاح المشاكل المؤكدة وإضافة اختبارات regression
-- [ ] تشغيل test/race/vet ومزامنة المستودعات وتقرير النتائج
+- [x] تشغيل test/race/vet ومزامنة المستودعات وتقرير النتائج
 
 # Confirmed Full Audit Fixes
 
