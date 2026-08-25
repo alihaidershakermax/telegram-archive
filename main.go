@@ -19,6 +19,7 @@ import (
 	"telegram-archive-bot/db"
 	"telegram-archive-bot/factory"
 	"telegram-archive-bot/handlers"
+	"telegram-archive-bot/utils"
 )
 
 func main() {
@@ -35,7 +36,7 @@ func main() {
 
 	// Create AI client and bot
 	handlers.SetAIClient(ai.NewClient(config.Cfg.AIBaseURL, config.Cfg.AIAPIKey, config.Cfg.AIModel, time.Duration(config.Cfg.AIRequestTimeoutSeconds)*time.Second))
-	bot, err := tgbotapi.NewBotAPI(config.Cfg.BotToken)
+	bot, err := utils.NewTelegramBot(config.Cfg.BotToken)
 	if err != nil {
 		log.Fatalf("Failed to create bot: %v", err)
 	}

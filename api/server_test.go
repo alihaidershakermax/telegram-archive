@@ -111,11 +111,19 @@ func TestAPIKeyPermissionMapping(t *testing.T) {
 		t.Fatalf("expected group archive:read, got %q", got)
 	}
 	groupPatchReq := httptest.NewRequest(http.MethodPatch, "/api/v2/groups/-1001", nil)
-	if got := apiKeyPermissionForRequest(groupPatchReq); got != "archive:write" {
-		t.Fatalf("expected group archive:write, got %q", got)
+	if got := apiKeyPermissionForRequest(groupPatchReq); got != "bot:settings" {
+		t.Fatalf("expected bot:settings, got %q", got)
 	}
 	postReq := httptest.NewRequest(http.MethodPost, "/api/v1/files", nil)
 	if got := apiKeyPermissionForRequest(postReq); got != "archive:write" {
 		t.Fatalf("expected archive:write, got %q", got)
+	}
+	bundleReq := httptest.NewRequest(http.MethodPost, "/api/v1/bundle", nil)
+	if got := apiKeyPermissionForRequest(bundleReq); got != "archive:read" {
+		t.Fatalf("expected bundle archive:read, got %q", got)
+	}
+	deleteReq := httptest.NewRequest(http.MethodDelete, "/api/v1/files", nil)
+	if got := apiKeyPermissionForRequest(deleteReq); got != "archive:delete" {
+		t.Fatalf("expected archive:delete, got %q", got)
 	}
 }

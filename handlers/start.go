@@ -592,7 +592,7 @@ func HandleFileUpload(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 	}
 	state.Mu.Unlock()
 	if startTimer {
-		go autoFinishUpload(bot, userID, state)
+		go autoFinishUpload(bot, message.Chat.ID, state)
 	}
 }
 

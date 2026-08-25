@@ -243,6 +243,11 @@ func EnsureIndexes() {
 
 // EnsureIndexesForContext creates the same indexes in the database selected by ctx.
 func EnsureIndexesForContext(ctx context.Context) {
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 60*time.Second)
+		defer cancel()
+	}
 	for _, spec := range indexSpecs {
 		model := mongo.IndexModel{Keys: spec.Keys}
 		if spec.Unique {

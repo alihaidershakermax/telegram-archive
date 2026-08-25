@@ -242,8 +242,16 @@ func apiKeyPathAllowed(path string) bool {
 }
 
 func apiKeyPermissionForRequest(r *http.Request) string {
-	if strings.HasPrefix(r.URL.Path, "/api/v1/ai/") {
+	path := r.URL.Path
+	if strings.HasPrefix(path, "/api/v2/groups/") && r.Method != http.MethodGet {
+		return "bot:settings"
+	}
+	// Bundle and AI endpoints read archive data but do not mutate it.
+	if strings.HasPrefix(path, "/api/v1/bundle") || strings.HasPrefix(path, "/api/v1/ai/") {
 		return "archive:read"
+	}
+	if r.Method == http.MethodDelete {
+		return "archive:delete"
 	}
 	if r.Method == http.MethodGet {
 		return "archive:read"

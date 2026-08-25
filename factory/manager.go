@@ -22,6 +22,7 @@ import (
 	"telegram-archive-bot/config"
 	"telegram-archive-bot/db"
 	"telegram-archive-bot/models"
+	"telegram-archive-bot/utils"
 )
 
 const (
@@ -135,7 +136,7 @@ func (m *Manager) Register(ctx context.Context, ownerID int64, token string) (*m
 		return nil, err
 	}
 
-	bot, err := tgbotapi.NewBotAPI(token)
+	bot, err := utils.NewTelegramBot(token)
 	if err != nil {
 		return nil, fmt.Errorf("telegram token validation failed: %w", err)
 	}
@@ -316,7 +317,7 @@ func (m *Manager) RotateToken(ctx context.Context, id string, ownerID int64, inc
 	} else if !errors.Is(err, mongo.ErrNoDocuments) {
 		return nil, err
 	}
-	bot, err := tgbotapi.NewBotAPI(newToken)
+	bot, err := utils.NewTelegramBot(newToken)
 	if err != nil {
 		return nil, fmt.Errorf("telegram token validation failed: %w", err)
 	}
@@ -372,7 +373,7 @@ func (m *Manager) Resume(ctx context.Context, id string, ownerID int64, includeA
 	if err != nil {
 		return err
 	}
-	bot, err := tgbotapi.NewBotAPI(token)
+	bot, err := utils.NewTelegramBot(token)
 	if err != nil {
 		m.markUnhealthy(ctx, id, err)
 		return fmt.Errorf("telegram token validation failed: %w", err)
@@ -434,7 +435,7 @@ func (m *Manager) startRecord(ctx context.Context, record models.ManagedBot) err
 	if err != nil {
 		return err
 	}
-	bot, err := tgbotapi.NewBotAPI(token)
+	bot, err := utils.NewTelegramBot(token)
 	if err != nil {
 		return err
 	}
@@ -491,11 +492,16 @@ func (m *Manager) startWorker(record models.ManagedBot, bot *tgbotapi.BotAPI) er
 }
 
 func (m *Manager) poll(id string, worker *managedWorker) {
-	defer close(worker.closed)
+	defer func() {
+		// A closed updates channel is also a worker termination path. Ensure
+		// health/lease goroutines stop and a future resume can restart it.
+		worker.shutdown()
+		m.removeWorker(id, worker)
+		close(worker.closed)
+	}()
 	leaseID := managedLeaseID(worker.bot.Self.ID)
 	log.Printf("managed bot %s waiting for polling lease", id)
 	if !m.waitForWorkerLease(context.Background(), leaseID, worker.bot.Self.ID, worker.stop) {
-		m.removeWorker(id, worker)
 		return
 	}
 	log.Printf("managed bot %s acquired polling lease", id)

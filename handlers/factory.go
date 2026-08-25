@@ -131,6 +131,28 @@ func parsePositiveInt64(value string) (int64, error) {
 	return n, nil
 }
 
+// resolveManagedBotTelegramID accepts either the numeric Telegram bot ID or
+// the managed-bot record ID printed by /mybots and /handoff.
+func resolveManagedBotTelegramID(ctx context.Context, raw string, ownerID int64) (int64, error) {
+	if botFactory == nil {
+		return 0, errors.New("bot factory is not configured")
+	}
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, errors.New("managed bot id is required")
+	}
+	if telegramID, err := parsePositiveInt64(raw); err == nil {
+		if _, lookupErr := botFactory.GetByTelegramBotID(ctx, telegramID); lookupErr == nil {
+			return telegramID, nil
+		}
+	}
+	row, err := botFactory.Get(ctx, raw, ownerID, false)
+	if err != nil || row == nil || row.TelegramBotID <= 0 {
+		return 0, errors.New("managed bot was not found")
+	}
+	return row.TelegramBotID, nil
+}
+
 // HandleDatabasePanelCommand shows cluster management controls in the parent bot.
 func HandleDatabasePanelCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 	allowed := isParentBotOwner(bot, message.From.ID)
@@ -190,12 +212,12 @@ func HandleMigrationCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 	}
 	parts := strings.Fields(message.CommandArguments())
 	if len(parts) != 2 {
-		bot.Send(tgbotapi.NewMessage(message.Chat.ID, "❌ الاستخدام: /migratebot <bot_id> <target_cluster_id>"))
+		bot.Send(tgbotapi.NewMessage(message.Chat.ID, "❌ الاستخدام: /migratebot <bot_id أو managed_bot_id> <target_cluster_id>"))
 		return
 	}
-	var botID int64
-	if _, err := fmt.Sscan(parts[0], &botID); err != nil || botID <= 0 {
-		bot.Send(tgbotapi.NewMessage(message.Chat.ID, "❌ bot_id غير صالح."))
+	botID, err := resolveManagedBotTelegramID(context.Background(), parts[0], message.From.ID)
+	if err != nil {
+		bot.Send(tgbotapi.NewMessage(message.Chat.ID, "❌ bot_id أو managed_bot_id غير صالح."))
 		return
 	}
 	target := parts[1]
@@ -219,10 +241,12 @@ func HandleMigrationStatusCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Messag
 	}
 	var botID int64
 	if arg := strings.TrimSpace(message.CommandArguments()); arg != "" {
-		if _, err := fmt.Sscan(arg, &botID); err != nil {
-			bot.Send(tgbotapi.NewMessage(message.Chat.ID, "❌ bot_id غير صالح."))
+		resolved, err := resolveManagedBotTelegramID(context.Background(), arg, message.From.ID)
+		if err != nil {
+			bot.Send(tgbotapi.NewMessage(message.Chat.ID, "❌ bot_id أو managed_bot_id غير صالح."))
 			return
 		}
+		botID = resolved
 	}
 	rows, err := botFactory.ListNamespaceMigrations(context.Background(), botID)
 	if err != nil {

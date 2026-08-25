@@ -258,7 +258,7 @@ func AddAdmin(ctx context.Context, userID int64, username, firstName, rank strin
 		return fmt.Errorf("invalid admin rank: %s", rank)
 	}
 	if firstName == "" {
-		firstName = "ID:" + bson.Raw(bson.RawValue{}.String()).String()
+		firstName = fmt.Sprintf("ID:%d", userID)
 	}
 	opts := options.Update().SetUpsert(true)
 	_, err := db.ColScoped(ctx, "admins").UpdateOne(ctx,
@@ -384,10 +384,15 @@ func SetMaintenanceMode(ctx context.Context, enabled bool) error {
 		bson.M{"$set": bson.M{"value": val}},
 		opts,
 	)
-	maintMu.Lock()
-	maintCache = &enabled
-	maintCacheTS = time.Now()
-	maintMu.Unlock()
+	// Scoped child settings must never mutate the primary process-wide cache.
+	// Also keep the cache unchanged when the database write fails.
+	if err == nil && !db.IsScoped(ctx) {
+		maintMu.Lock()
+		value := enabled
+		maintCache = &value
+		maintCacheTS = time.Now()
+		maintMu.Unlock()
+	}
 	return err
 }
 

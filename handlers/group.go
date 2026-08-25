@@ -1,12 +1,10 @@
 package handlers
 
 import (
-	"context"
 	"fmt"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 
-	"telegram-archive-bot/db"
 	"telegram-archive-bot/services"
 )
 
@@ -18,7 +16,7 @@ func HandleGroupCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 		_, _ = bot.Send(tgbotapi.NewMessage(message.Chat.ID, "ℹ️ هذا الأمر يعمل داخل المجموعات فقط."))
 		return
 	}
-	ctx := db.WithBotDatabase(context.Background(), bot.Self.ID)
+	ctx := archiveContext(bot)
 	group, err := services.GetOrCreateGroup(ctx, bot.Self.ID, message.Chat.ID, message.Chat.Title)
 	if err != nil {
 		_, _ = bot.Send(tgbotapi.NewMessage(message.Chat.ID, "❌ تعذر تحميل إعدادات المجموعة."))

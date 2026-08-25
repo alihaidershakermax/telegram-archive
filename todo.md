@@ -260,3 +260,70 @@
 - [x] إصلاح نقطة الانقطاع المؤكدة فقط وإضافة اختبارها
 - [ ] مزامنة النسخة النهائية وتوثيق تحقق الإنتاج
 - [x] إضافة trace آمن لرسائل keyboard النصية مع bot_id وmessage_id وaction
+
+# Koyeb Instance Stop Analysis
+
+- [ ] تحديد ما إذا كان Instance stopping ناتجاً عن Koyeb أو shutdown داخلي
+- [ ] تدقيق استمرار parent وchild polling حتى لحظة التوقف
+- [x] إضافة تشخيص أو إصلاح lifecycle المؤكد فقط
+- [ ] توثيق خطوات إعادة التشغيل والتحقق من keyboard
+
+# Attached Koyeb Log Verification
+
+- [ ] مطابقة زمن الضغط مع أي update للـparent أو child في السجل المرفق
+- [ ] التحقق من أن النسخة المرفوعة تحتوي trace `message received` و`reply keyboard action`
+- [ ] عدم تغيير الكود ما لم يثبت السجل نقطة انقطاع جديدة
+
+# Repeated Koyeb Log
+
+- [ ] تأكيد أن السجل المرفق الثاني مطابق للأول ولا يحتوي update من Telegram
+- [ ] طلب سجل يتضمن اختبار ضغط الزر أثناء polling الفعلي
+
+# Koyeb Repeated Shutdown Regression
+
+- [ ] تحديد سبب إرسال SIGTERM بعد تشغيل الخدمة
+- [ ] تدقيق health endpoint ومدة الاستجابة واستهلاك الموارد
+- [ ] التمييز بين scale-to-zero وredeploy وOOM والإيقاف اليدوي
+- [x] توثيق الإعداد المطلوب لمنع توقف long polling
+
+# Koyeb Scale-to-Zero Removal
+
+- [ ] التحقق من نوع خطة Koyeb وقيود الـInstance الحالية
+- [ ] تعطيل Scale-to-zero أو ضبط Minimum instances على 1 إن كان متاحاً
+- [ ] التحقق من استمرار polling بعد تعديل الإعداد
+
+# Remove Internal Idle Logic
+
+- [x] جرد أي scale-to-zero أو idle timeout أو sleep داخلي في الكود
+- [x] إزالة منطق الإيقاف التلقائي الداخلي إن وُجد
+- [x] التأكد من بقاء polling والـhealth server نشطين حتى SIGTERM الخارجي
+- [ ] تشغيل الاختبارات ومزامنة الإصلاح
+
+# Full Code Audit
+
+- [x] جرد الملفات والحزم ونقاط الدخول والإعدادات
+- [x] تدقيق startup وshutdown وhealth server وpolling
+- [x] تدقيق parent/child leases وworker lifecycle والتزامن
+- [x] تدقيق dispatch للcommands/messages/callbacks والـkeyboards
+- [x] تدقيق الصلاحيات وhandoff وعزل namespace وقواعد البيانات
+- [x] تدقيق queues وdownloads وstorage وtimeouts وتسريب الموارد
+- [x] تدقيق API والأخطاء الصامتة وتسجيل الأسرار
+- [x] إصلاح المشاكل المؤكدة وإضافة اختبارات regression
+- [ ] تشغيل test/race/vet ومزامنة المستودعات وتقرير النتائج
+
+# Confirmed Full Audit Fixes
+
+- [x] إصلاح FormatUserLabel ليعرض Telegram ID بصيغة عشرية صحيحة
+- [x] عزل maintenance cache بين primary وchild namespaces
+- [x] توحيد معرفات migration بين /mybots و/handoff و/migratebot
+- [x] إصلاح fallback الافتراضي لاسم الأدمن الفارغ
+- [x] تدقيق resource lifecycle في health/index goroutines
+- [x] إصلاح category picker بعد رفع الملفات ليعود إلى chat ID الصحيح في المجموعات
+- [x] استخدام archiveContext في HandleGroupCommand لمنع تحويل parent إلى child namespace بالخطأ
+- [x] جعل إشعارات subscribers claim ذرياً قبل الإرسال ومنع التكرار تحت التزامن
+- [x] ضمان shutdown وإزالة worker من map عند إغلاق updates أو انتهاء poll لأي سبب
+- [x] ضبط HTTP timeout موحد لكل parent وchild Telegram BotAPI قبل startup وhealth
+- [x] وضع timeout داخلي لتهيئة Mongo indexes قبل تشغيل health server
+- [x] إصلاح SetGroupEnabled ليُنشئ GroupConfig كاملة وآمنة عند عدم وجود المجموعة
+- [ ] حماية RestoreBotBackup من الفشل الجزئي وعدم مسح namespace قبل التحقق من بيانات النسخة
+- [x] تطبيق API permissions المعلنة فعلياً حسب route بدلاً من الاكتفاء بـarchive:read/write

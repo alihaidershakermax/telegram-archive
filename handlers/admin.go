@@ -18,8 +18,9 @@ import (
 	"telegram-archive-bot/services"
 )
 
-// autoFinishUpload waits 5 seconds then shows the category picker for uploaded files.
-func autoFinishUpload(bot *tgbotapi.BotAPI, userID int64, state *models.UserState) {
+// autoFinishUpload waits 5 seconds then shows the category picker in the
+// same chat where the upload arrived (important for group chats).
+func autoFinishUpload(bot *tgbotapi.BotAPI, chatID int64, state *models.UserState) {
 	time.Sleep(5 * time.Second)
 	defer func() { state.Mu.Lock(); state.UploadTimerActive = false; state.Mu.Unlock() }()
 
@@ -34,14 +35,14 @@ func autoFinishUpload(bot *tgbotapi.BotAPI, userID int64, state *models.UserStat
 	ctx := archiveContext(bot)
 	cats, err := services.GetCategories(ctx)
 	if err != nil || len(cats) == 0 {
-		msg := tgbotapi.NewMessage(userID, "❌ لا توجد تصنيفات. أضف تصنيفاً أولاً من لوحة التحكم.")
+		msg := tgbotapi.NewMessage(chatID, "❌ لا توجد تصنيفات. أضف تصنيفاً أولاً من لوحة التحكم.")
 		bot.Send(msg)
 		return
 	}
 
 	kb := keyboards.UploadCategoriesKeyboard(cats)
 	text := fmt.Sprintf("✅ تم استلام (%d) ملفات.\n📂 اختر التصنيف لحفظها:", count)
-	msg := tgbotapi.NewMessage(userID, text)
+	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ReplyMarkup = kb
 	bot.Send(msg)
 }

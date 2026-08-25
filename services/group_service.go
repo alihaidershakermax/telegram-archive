@@ -40,6 +40,25 @@ func GetOrCreateGroup(ctx context.Context, botID, chatID int64, title string) (*
 }
 
 func SetGroupEnabled(ctx context.Context, botID, chatID int64, enabled bool) error {
-	_, err := db.ColScoped(ctx, "group_configs").UpdateOne(ctx, bson.M{"bot_id": botID, "chat_id": chatID}, bson.M{"$set": bson.M{"enabled": enabled, "updated_at": time.Now().UTC()}}, options.Update().SetUpsert(true))
+	if botID == 0 || chatID == 0 {
+		return mongo.ErrNoDocuments
+	}
+	now := time.Now().UTC()
+	_, err := db.ColScoped(ctx, "group_configs").UpdateOne(
+		ctx,
+		bson.M{"bot_id": botID, "chat_id": chatID},
+		bson.M{
+			"$set": bson.M{"enabled": enabled, "updated_at": now},
+			"$setOnInsert": bson.M{
+				"_id":         primitive.NewObjectID().Hex(),
+				"bot_id":      botID,
+				"chat_id":     chatID,
+				"enabled":     enabled,
+				"admins_only": false,
+				"created_at":  now,
+			},
+		},
+		options.Update().SetUpsert(true),
+	)
 	return err
 }

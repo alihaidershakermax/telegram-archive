@@ -8,7 +8,6 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
 	"telegram-archive-bot/db"
@@ -85,15 +84,31 @@ func NotifySubjectSubscribers(ctx context.Context, bot *tgbotapi.BotAPI, botID i
 		return err
 	}
 	for _, sub := range subs {
-		var existing models.SubjectNotification
-		lookupErr := db.ColScoped(ctx, "subject_notifications").FindOne(ctx, bson.M{"bot_id": botID, "user_id": sub.UserID, "file_id": file.FileID}).Decode(&existing)
-		if lookupErr == nil || lookupErr != mongo.ErrNoDocuments {
+		// Claim the notification atomically before sending. A Find-then-Send-
+		// Insert sequence can deliver duplicates when two upload workers race.
+		notification := models.SubjectNotification{
+			ID:        primitive.NewObjectID().Hex(),
+			BotID:     botID,
+			UserID:    sub.UserID,
+			SubjectID: file.SubjectID,
+			FileID:    file.FileID,
+			SentAt:    time.Now().UTC(),
+		}
+		claim, claimErr := db.ColScoped(ctx, "subject_notifications").UpdateOne(ctx,
+			bson.M{"bot_id": botID, "user_id": sub.UserID, "file_id": file.FileID},
+			bson.M{"$setOnInsert": notification},
+			options.Update().SetUpsert(true),
+		)
+		if claimErr != nil {
+			return claimErr
+		}
+		if claim.UpsertedCount == 0 {
 			continue
 		}
 		if _, sendErr := bot.Send(tgbotapi.NewMessage(sub.UserID, fmt.Sprintf("📚 ملف جديد في المادة\\n\\n%s\\n\\nاستخدم /start لفتح الأرشيف.", file.Name))); sendErr != nil {
-			continue
+			// Let a later upload-queue retry claim it again if delivery failed.
+			_, _ = db.ColScoped(ctx, "subject_notifications").DeleteOne(ctx, bson.M{"_id": notification.ID})
 		}
-		_, _ = db.ColScoped(ctx, "subject_notifications").InsertOne(ctx, models.SubjectNotification{ID: primitive.NewObjectID().Hex(), BotID: botID, UserID: sub.UserID, SubjectID: file.SubjectID, FileID: file.FileID, SentAt: time.Now().UTC()})
 	}
 	return nil
 }

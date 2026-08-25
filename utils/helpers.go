@@ -3,6 +3,7 @@ package utils
 import (
 	"log"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -115,7 +116,7 @@ func FormatUserLabel(firstName, username string, userID int64) string {
 	if len(parts) > 0 {
 		return strings.Join(parts, " ")
 	}
-	return "ID:" + strings.TrimSpace(strings.Replace(string(rune(userID)), "", "", -1))
+	return "ID:" + strconv.FormatInt(userID, 10)
 }
 
 // EditOrSend edits a callback query message, or sends a new one if editing fails.
